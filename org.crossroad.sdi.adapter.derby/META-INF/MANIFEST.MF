@@ -1,0 +1,17 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: org.crossroad.sdi.adapter.derby
+Bundle-SymbolicName: org.crossroad.sdi.adapter.derby
+Bundle-Version: 1.0.0.qualifier
+Bundle-Activator: org.crossroad.sdi.adapter.derby.Activator
+Require-Bundle: org.apache.log4j,
+ org.crossroad.sdi.adapter
+Bundle-RequiredExecutionEnvironment: JavaSE-1.7
+Import-Package: com.sap.hana.dp.adapter.sdk;version:="[1.1.0)",
+ com.sap.hana.dp.adapter.sdk.parser;version:="[1.1.0)",
+ com.sap.hana.dp.adapter.sdk.parser.antlr;version:="[1.1.0)",
+ org.osgi.framework
+Bundle-ActivationPolicy: lazy
+Bundle-Vendor: Crossroad Inc
+Bundle-ClassPath: .,
+ lib/derbyclient.jar
