@@ -32,12 +32,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
 import com.sap.hana.dp.adapter.sdk.Adapter;
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.AdapterCapability;
+import com.sap.hana.dp.adapter.sdk.AdapterConstant.ColumnCapability;
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.DataType;
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.LobCharset;
 import com.sap.hana.dp.adapter.sdk.AdapterException;
@@ -85,7 +85,7 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	protected int fetchSize;
 	protected boolean listSystemData = false;
 	protected boolean nullableAsEmpty = false;
-
+	protected ColumnHelper columnHelper = new ColumnHelper();
 	protected HashMap<Long, InputStream> blobHandle;
 	protected HashMap<Long, Reader> clobHandle;
 
@@ -899,18 +899,33 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 				int size = rsColumns.getInt("COLUMN_SIZE");
 				int nullable = rsColumns.getInt("NULLABLE");
 
-				Column col = new Column(columnName, getAdapterDataType(columnType));
-				col.setLength(size);
-				col.setNullable(nullable == DatabaseMetaData.columnNullable);
-				col.setNativeDataType(typeName);
+				Column column = new Column(columnName, getAdapterDataType(columnType));
+				column.setLength(size);
+				column.setNullable(nullable == DatabaseMetaData.columnNullable);
+				column.setNativeDataType(typeName);
 				if (getAdapterDataType(columnType) == DataType.DECIMAL) {
-					col.setPrecision(size);
-					col.setScale(rsColumns.getInt("DECIMAL_DIGITS"));
+					column.setPrecision(size);
+					column.setScale(rsColumns.getInt("DECIMAL_DIGITS"));
 				}
 
 				logger.debug(AdapterUtil.dumpResultSet(rsColumns));
 
-				cols.add(col);
+				columnHelper.addColumn(column, columnType);
+
+				Capabilities<ColumnCapability> columnCaps = new Capabilities<ColumnCapability>();
+				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_BETWEEN);
+				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_FILTER);
+				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_GROUP);
+				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_IN);
+				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_INNER_JOIN);
+				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_LIKE);
+				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_NONEQUAL_COMPARISON);
+				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_OUTER_JOIN);
+				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_SELECT);
+				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_SORT);
+				column.setCapabilities(columnCaps);
+				
+				cols.add(column);
 			}
 
 		} catch (SQLException e) {

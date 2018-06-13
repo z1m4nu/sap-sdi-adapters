@@ -90,7 +90,7 @@ public class SQLRewriter {
 
 		return sql.toString();
 	}
-
+	
 	private static String printOrder(List<Order> order) throws Exception {
 		boolean first = true;
 		StringBuffer str = new StringBuffer();

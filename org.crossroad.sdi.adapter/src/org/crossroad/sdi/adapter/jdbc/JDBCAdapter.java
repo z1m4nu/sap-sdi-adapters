@@ -22,6 +22,7 @@ import com.sap.hana.dp.adapter.sdk.PropertyGroup;
  * pointing to SQL server
  */
 public class JDBCAdapter extends AbstractJDBCAdapter {
+	private JDBCStatementConverter rewriter = new JDBCStatementConverter(128);
 
 	public Class getLoggerName() {
 		return JDBCAdapter.class;
@@ -169,7 +170,9 @@ public class JDBCAdapter extends AbstractJDBCAdapter {
 	 * @see org.crossroad.sdi.adapter.impl.IJDBCAdapter#rewriteSQL(java.lang.String)
 	 */
 	public String rewriteSQL(String sqlstatement) throws AdapterException {
-		String sql = SQLRewriter.rewriteSQL(sqlstatement);
+		
+		//String sql = SQLRewriter.rewriteSQL(sqlstatement);
+		String sql = rewriter.convertSQL(sqlstatement, this.columnHelper);
 		logger.info("SQL Generated [" + sql + "]");
 		return sql;
 	}
