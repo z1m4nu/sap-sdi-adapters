@@ -150,13 +150,38 @@ public abstract class AbstractStatementConverter {
 		return statement;
 	}
 
+
+
+
+
+	
 	/**
 	 * Main method to generate insert statement
 	 * 
 	 * @param query
 	 * @return
 	 */
-	protected abstract String insertStatement(Query query) throws AdapterException;
+	protected String insertStatement(Query query) throws AdapterException {
+		StringBuffer sql = new StringBuffer();
+
+		sql.append("INSERT INTO ");
+		sql.append(expressionBuilder(query.getFromClause()));
+		if (query.getProjections() != null) {
+			sql.append(" (");
+			sql.append(expressionBaseListBuilder(query.getProjections()));
+			sql.append(")");
+		}
+		if (query.getValueClause() != null) {
+			sql.append(" VALUES ");
+			sql.append("(");
+			sql.append(expressionBaseListBuilder(query.getValueClause()));
+			sql.append(")");
+		}
+		if (query.getSubquery() != null) {
+			sql.append(expressionBuilder(query.getSubquery()));
+		}
+		return sql.toString();
+	}
 
 	/**
 	 * Main method to generate update statement
@@ -164,7 +189,18 @@ public abstract class AbstractStatementConverter {
 	 * @param query
 	 * @return
 	 */
-	protected abstract String updateStatement(Query query) throws AdapterException;
+	protected String updateStatement(Query query) throws AdapterException {
+		StringBuffer sql = new StringBuffer();
+		sql.append("UPDATE ");
+		sql.append(expressionBuilder(query.getFromClause()));
+		sql.append(" SET ");
+		sql.append(setClauseBuilder(query.getProjections()));
+		if (query.getWhereClause() != null) {
+			sql.append(" WHERE ");
+			sql.append(whereClauseBuilder(query.getWhereClause()));
+		}
+		return sql.toString();
+	}
 
 	/**
 	 * Main method to generate delete statement
@@ -172,7 +208,16 @@ public abstract class AbstractStatementConverter {
 	 * @param query
 	 * @return
 	 */
-	protected abstract String deleteStatement(Query query) throws AdapterException;
+	protected String deleteStatement(Query query) throws AdapterException {
+		StringBuffer sql = new StringBuffer();
+		sql.append("DELETE FROM ");
+		sql.append(expressionBuilder(query.getFromClause()));
+		if (query.getWhereClause() != null) {
+			sql.append(" WHERE ");
+			sql.append(whereClauseBuilder(query.getWhereClause()));
+		}
+		return sql.toString();
+	}
 
 	/**
 	 * Main method to generate select statement
@@ -180,7 +225,36 @@ public abstract class AbstractStatementConverter {
 	 * @param query
 	 * @return
 	 */
-	protected abstract String selectStatement(Query query) throws AdapterException;
+	protected String selectStatement(Query query) throws AdapterException {
+		StringBuffer sql = new StringBuffer();
+
+		sql.append("SELECT ");
+		if (query.getLimit() != null) {
+			sql.append("TOP ");
+			sql.append(query.getLimit());
+			sql.append(" ");
+		}
+		if (query.getDistinct()) {
+			sql.append("DISTINCT ");
+		}
+		sql.append(expressionBaseListBuilder(query.getProjections()));
+
+		sql.append(fromClauseBuilder(query.getFromClause()));
+
+		if (query.getWhereClause() != null) {
+			sql.append(whereClauseBuilder(query.getWhereClause()));
+		}
+		if (query.getGroupBy() != null) {
+			sql.append(groupByClauseBuilder(query.getGroupBy()));
+		}
+		if (query.getHavingClause() != null) {
+			sql.append(havingClauseBuilder(query.getHavingClause()));
+		}
+		if (query.getOrderBy() != null) {
+			sql.append(orderClauseBuilder(query.getOrderBy()));
+		}
+		return sql.toString();
+	}
 
 	/**
 	 * Convert to SQL function
