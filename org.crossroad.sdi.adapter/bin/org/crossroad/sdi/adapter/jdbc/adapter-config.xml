@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<PropertyGroup name="UI" displayName="UI">
+    <PropertyGroup name="logging" displayName="Replication Agent Logging">
+        <PropertyEntry name="log_backup_files" displayName="Number of wrapped log files" defaultValue="10"/>
+        <PropertyEntry name="log_trace_verbose" displayName="Enable verbose trace" defaultValue="false">
+            <Choices>
+                <Choice name="true" displayName="true"/>
+                <Choice name="false" displayName="false"/>
+            </Choices>
+        </PropertyEntry>
+        <PropertyEntry name="log_wrap" displayName="Maximum log file Size (KB)" defaultValue="100000"/>
+    </PropertyGroup>
+</PropertyGroup>
