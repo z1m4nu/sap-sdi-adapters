@@ -171,7 +171,9 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 		String username = "";
 		String password = "";
 		CredentialProperties p = connectionInfo.getCredentialProperties();
-		CredentialEntry c = p.getCredentialEntry("credential");
+		
+		CredentialEntry c = p.getCredentialEntry("db_credential");
+		
 		try {
 			username = new String(c.getUser().getValue(), "UTF-8");
 			password = new String(c.getPassword().getValue(), "UTF-8");
@@ -227,6 +229,9 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 			}
 
 			DriverManager.registerDriver(new DriverDelegator(d));
+			
+			logger.debug("Version Major ["+d.getMajorVersion()+"] Minor ["+d.getMinorVersion()+"]");
+			
 			connection = DriverManager.getConnection(jdbcUrl, username, password);
 
 			try {

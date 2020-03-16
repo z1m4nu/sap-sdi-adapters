@@ -102,6 +102,7 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 			fmt.close();
 
 		}
+		logger.debug("JDBC URL ["+jdbcUrl+"]");
 		return jdbcUrl;
 	}
 

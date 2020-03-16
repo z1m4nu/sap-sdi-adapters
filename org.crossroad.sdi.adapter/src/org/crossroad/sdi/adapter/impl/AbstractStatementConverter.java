@@ -667,7 +667,7 @@ public abstract class AbstractStatementConverter {
 		case CASE_CLAUSE:
 		case CASE_CLAUSES:
 		case CASE_ELSE:
-		case ROW_NUMBER:
+		//case ROW_NUMBER:
 		case UNARY_POSITIVE:
 		case INSERT:
 		default:

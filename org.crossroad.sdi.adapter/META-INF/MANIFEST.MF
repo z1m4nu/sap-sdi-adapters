@@ -2,12 +2,12 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: org.crossroad.sdi.adapter
 Bundle-SymbolicName: org.crossroad.sdi.adapter
-Bundle-Version: 1.0.11
+Bundle-Version: 1.0.13
 Bundle-Activator: org.crossroad.sdi.adapter.Activator
 Require-Bundle: com.sap.db.jdbc,
  com.sap.hana.dp.adapterframework,
  com.sap.hana.dp.agent
-Bundle-RequiredExecutionEnvironment: JavaSE-1.6
+Bundle-RequiredExecutionEnvironment: JavaSE-1.8
 Import-Package: org.antlr.runtime,
  org.apache.log4j,
  org.osgi.framework

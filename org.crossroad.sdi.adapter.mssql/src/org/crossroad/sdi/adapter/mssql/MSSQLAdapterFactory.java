@@ -10,6 +10,7 @@ import com.sap.hana.dp.adapter.sdk.RemoteSourceDescription;
 
 public class MSSQLAdapterFactory implements AdapterFactory {
 	static Logger logger = LogManager.getLogger(MSSQLAdapterFactory.class);
+	private static final String NAME = "JDBC - Microsoft SQL Server";
 
 	@Override
 	public Adapter createAdapterInstance() {
@@ -18,12 +19,12 @@ public class MSSQLAdapterFactory implements AdapterFactory {
 
 	@Override
 	public String getAdapterType() {
-		return "JDBC - Microsoft SQL Server";
+		return NAME;
 	}
 
 	@Override
 	public String getAdapterDisplayName() {
-		return "JDBC - Microsoft SQL Server";
+		return NAME;
 	}
 
 	@Override

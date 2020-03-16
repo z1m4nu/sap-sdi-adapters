@@ -25,7 +25,7 @@ public class Activator  implements BundleActivator {
 	public void start(BundleContext bundleContext) throws Exception {
 		Activator.context = bundleContext;
 		services.add(context.registerService(AdapterFactory.class.getName(),new MSSQLAdapterFactory() ,null));
-		services.add(context.registerService(AdapterFactory.class.getName(),new MSSQLAdapterFactoryCDC() ,null));
+		//services.add(context.registerService(AdapterFactory.class.getName(),new MSSQLAdapterFactoryCDC() ,null));
 		
 	}
 

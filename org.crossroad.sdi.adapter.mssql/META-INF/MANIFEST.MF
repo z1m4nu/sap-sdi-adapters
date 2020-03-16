@@ -2,16 +2,16 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: org.crossroad.sdi.adapter
 Bundle-SymbolicName: org.crossroad.sdi.adapter.mssql
-Bundle-Version: 1.0.8
+Bundle-Version: 1.0.10
 Bundle-Activator: org.crossroad.sdi.adapter.mssql.Activator
 Bundle-Vendor: Crossroad Inc
 Require-Bundle: org.apache.log4j,
  org.crossroad.sdi.adapter
-Bundle-RequiredExecutionEnvironment: JavaSE-1.7
+Bundle-RequiredExecutionEnvironment: JavaSE-1.8
 Import-Package: com.sap.hana.dp.adapter.sdk,
  com.sap.hana.dp.adapter.sdk.parser,
  com.sap.hana.dp.adapter.sdk.parser.antlr,
  org.osgi.framework
 Bundle-ActivationPolicy: lazy
-Bundle-ClassPath: lib/sqljdbc4.jar,
- .
+Bundle-ClassPath: .
+DynamicImport-Package: com.microsoft.sqlserver.jdbc,microsoft.sql

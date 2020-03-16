@@ -47,14 +47,11 @@ public class SQLRewriter {
 	private Set<String> smalldatetimeCols = new HashSet<String>();
 	private Set<String> binaryCols = new HashSet<String>();
 	private Set<String> varbinaryCols = new HashSet<String>();
-	private ColumnHelper columnHelper = null;
-
 	public SQLRewriter(int maxIdentifierLength) {
 		this.maxIdentifierLength = maxIdentifierLength;
 	}
 
 	public void setColumnHelper(ColumnHelper helper) {
-		this.columnHelper = helper;
 	}
 
 	public SQLRewriter(int maxIdentifierLength, String schemaAlias, String schemaAliasReplacement) {
@@ -93,8 +90,6 @@ public class SQLRewriter {
 		logger.debug("Rewrite SQL [" + sql + "]");
 
 		cleanUp();
-
-		this.columnHelper = helper;
 
 		if (specialTypes != null) {
 			if (specialTypes.containsKey("DATETIME")) {
@@ -454,7 +449,7 @@ public class SQLRewriter {
 		case CASE_CLAUSE:
 		case CASE_CLAUSES:
 		case CASE_ELSE:
-		case ROW_NUMBER:
+		//case ROW_NUMBER:
 		case UNARY_POSITIVE:
 		case INSERT:
 		default:
