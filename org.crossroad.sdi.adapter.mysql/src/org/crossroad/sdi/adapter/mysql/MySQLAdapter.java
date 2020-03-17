@@ -222,16 +222,12 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 				int nullable = rsColumns.getInt("NULLABLE");
 				int scale = rsColumns.getInt("DECIMAL_DIGITS");
 				String columnDesc = rsColumns.getString("REMARKS");
-
-				int mssqlTypeId = MySQLHANAType.getMySQLTypeId(columnType, typeName);
-				DataType hanaDataType = MySQLHANAType.getHanaDatatype(mssqlTypeId, size, true);
 				
-				Column column = new Column(columnName, hanaDataType);
-				MySQLHANAType.setDatatypeParameters(column, mssqlTypeId, size, size, scale);
+				Column column = MySQLHANAType.buildMySQLColumn(columnName, columnType, typeName, size, size, scale);
 				column.setDescription(columnDesc);
 				column.setNullable(nullable == 1);
 
-				columnHelper.addColumn(column, mssqlTypeId);
+				columnHelper.addColumn(column, columnType);
 				Capabilities<ColumnCapability> columnCaps = new Capabilities<ColumnCapability>();
 				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_BETWEEN);
 				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_FILTER);
@@ -247,28 +243,6 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 
 				cols.add(column);
 
-				// String Builder
-				StringBuilder builder = new StringBuilder("column [");
-				builder.append(columnName);
-				builder.append("] - JDBC Type [");
-				builder.append(columnType);
-				builder.append("] - MySQL Type [");
-				builder.append(mssqlTypeId);
-				builder.append("] - HANA Type [");
-				builder.append(hanaDataType.name() + " (" + hanaDataType.getValue() + ")");
-				builder.append("] name [");
-				builder.append(typeName);
-				builder.append("] Length [");
-				builder.append(column.getLength());
-				builder.append("] NativeLength [");
-				builder.append(column.getNativeLength());
-				builder.append("] Precision [");
-				builder.append(column.getPrecision());
-				builder.append("] NativePrecision [");
-				builder.append(column.getNativePrecision());
-				builder.append("]");
-
-				logger.info(builder.toString());
 
 
 			}

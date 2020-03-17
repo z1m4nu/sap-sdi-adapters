@@ -18,6 +18,7 @@ import org.crossroad.sdi.adapter.impl.UniqueNameTools;
 
 
 import com.sap.hana.dp.adapter.sdk.AdapterException;
+import com.sap.hana.dp.adapter.sdk.Timestamp;
 import com.sap.hana.dp.adapter.sdk.parser.ColumnReference;
 import com.sap.hana.dp.adapter.sdk.parser.Expression;
 import com.sap.hana.dp.adapter.sdk.parser.ExpressionBase;
@@ -695,20 +696,18 @@ public class SQLRewriter {
 
 		String _v = ((Expression) expr.getOperands().get(0)).getValue();
 
-		throw new AdapterException("Expression type [" + expr.getType().name() + "] is not supported.");
-//		switch (expr.getType()) {
-//		case TIMESTAMP_LITERAL:
-//			//buffer.append("{ts");
-//			buffer.append("convert(datetime,");
-//			buffer.append(MSSQLAdapterUtil.buidTS(MSSQLAdapterUtil.str2DT(_v)));
-//			buffer.append(")");
-//			//buffer.append("}");
-//			break;
-//		default:
-//			throw new AdapterException("Expression type [" + expr.getType().name() + "] is not supported.");
-//		}
+		
+		switch (expr.getType()) {
+		case TIMESTAMP_LITERAL:
+			buffer.append("TIMESTAMP ");
+			buffer.append(_v);
+			buffer.append("");
+			break;
+		default:
+			throw new AdapterException("Expression type [" + expr.getType().name() + "] is not supported.");
+		}
 
-		//return buffer.toString();
+		return buffer.toString();
 	}
 
 	private String printFxColumns(Expression expr) throws AdapterException {
