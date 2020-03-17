@@ -92,7 +92,7 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	public AbstractJDBCAdapter() {
 		super();
 
-		logger = LogManager.getLogger(getLoggerName());
+		logger = LogManager.getLogger(getClass().getSimpleName());
 		/*
 		 * Debug purpose
 		 */
