@@ -33,7 +33,6 @@ import org.crossroad.sdi.adapter.impl.UniqueNameTools;
 
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.AdapterCapability;
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.ColumnCapability;
-import com.sap.hana.dp.adapter.sdk.AdapterConstant.DataType;
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.TableCapability;
 import com.sap.hana.dp.adapter.sdk.AdapterException;
 import com.sap.hana.dp.adapter.sdk.Capabilities;
@@ -53,6 +52,11 @@ import com.sap.hana.dp.adapter.sdk.parser.ExpressionBase;
  *
  */
 public class MySQLAdapter extends AbstractJDBCAdapter {
+	public static final String KEY_DATAMAPPING = "jdbc.datamapping";
+	public static final String KEY_DATAMAPPING_FILE = "jdbc.datamapping.file";
+	public static final String KEY_DATAMAPPING_FILE_DEFAULT = "mapping.properties";
+	
+	
 	public static final String MYSQL_JDBC_URL = "jdbc:mysql://%1$s:%2$s/%3$s?zeroDateTimeBehavior=convertToNull%4$s";
 	public static final String MYSQL_JDBC_CLASS = "com.mysql.jdbc.Driver";
 	private String schemaname_metadata = null;
@@ -60,7 +64,24 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 	private PreparedStatement pstmt = null;
 	private SQLRewriter sqlRewriter = new SQLRewriter(128);
 	protected ExpressionBase.Type pstmtType = ExpressionBase.Type.QUERY;
-
+	
+	private MySQLDataTypeMapping mapping = new  MySQLDataTypeMapping();
+	
+	
+	@Override
+	public void open(RemoteSourceDescription connectionInfo, boolean isCDC) throws AdapterException {
+		// TODO Auto-generated method stub
+		super.open(connectionInfo, isCDC);
+		
+		PropertyGroup connectionGroup = connectionInfo.getConnectionProperties();
+		boolean customMapping = (connectionGroup.getPropertyEntry(KEY_DATAMAPPING) != null)
+				? AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(
+						connectionGroup.getPropertyEntry(KEY_DATAMAPPING).getValue())
+				: false;
+		
+						
+		mapping.init((customMapping?connectionGroup.getPropertyEntry(KEY_DATAMAPPING_FILE).getValue():null));
+	}
 
 
 	@Override
@@ -223,7 +244,8 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 				int scale = rsColumns.getInt("DECIMAL_DIGITS");
 				String columnDesc = rsColumns.getString("REMARKS");
 				
-				Column column = MySQLHANAType.buildMySQLColumn(columnName, columnType, typeName, size, size, scale);
+				//Column column = MySQLHANAType.buildMySQLColumn(columnName, columnType, typeName, size, size, scale);
+				Column column = mapping.createColumn(columnName, columnType, typeName, size, size, scale);
 				column.setDescription(columnDesc);
 				column.setNullable(nullable == 1);
 
@@ -275,6 +297,18 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 		populateCFGDriverList(drvList);
 		mainGroup.addProperty(drvList);
 
+		
+		PropertyEntry mappingDataChoice = new PropertyEntry(KEY_DATAMAPPING, "Use custom data mapping",
+				"", false);
+		mappingDataChoice.addChoice(AdapterConstants.BOOLEAN_TRUE, AdapterConstants.BOOLEAN_TRUE);
+		mappingDataChoice.addChoice(AdapterConstants.BOOLEAN_FALSE, AdapterConstants.BOOLEAN_FALSE);
+		mappingDataChoice.setDefaultValue(AdapterConstants.BOOLEAN_FALSE);
+		
+		PropertyEntry mappingFile = new PropertyEntry(KEY_DATAMAPPING_FILE, "Mapping file", "Mapping file", false);
+		mappingFile.setDefaultValue(KEY_DATAMAPPING_FILE);
+		
+		mainGroup.addProperty(mappingDataChoice);
+		mainGroup.addProperty(mappingFile);
 		
 		rs.setCredentialProperties(RemoteSourceDescriptionFactory.getCredentialProperties());
 		rs.setConnectionProperties(mainGroup);

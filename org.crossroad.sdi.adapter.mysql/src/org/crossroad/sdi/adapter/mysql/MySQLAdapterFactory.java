@@ -17,7 +17,7 @@ import com.sap.hana.dp.adapter.sdk.RemoteSourceDescription;
  */
 public class MySQLAdapterFactory implements AdapterFactory {
 	static Logger logger = LogManager.getLogger(MySQLAdapterFactory.class);
-	private static final String NAME = "JDBC - MySQL Server";
+	private static final String NAME = "DBGMYSQL";//"JDBC - MySQL Server";
 
 	@Override
 	public Adapter createAdapterInstance() {
@@ -36,7 +36,7 @@ public class MySQLAdapterFactory implements AdapterFactory {
 
 	@Override
 	public String getAdapterDescription() {
-		return "DP Adapter MSSQLAdapter";
+		return "DP Adapter MySQLAdapter";
 	}
 
 	@Override
