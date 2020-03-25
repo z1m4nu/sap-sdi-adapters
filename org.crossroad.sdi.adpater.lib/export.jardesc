@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="WINDOWS-1252" standalone="no"?>
+<jardesc>
+    <jar path="C:/data/999_RELEASE/java/SDI/org.crossroad.sdi.adapter.lib_1.0.0.jar"/>
+    <options buildIfNeeded="true" compress="true" descriptionLocation="/org.crossroad.sdi.adpater.lib/export.jardesc" exportErrors="true" exportWarnings="true" includeDirectoryEntries="false" overwrite="true" saveDescription="true" storeRefactorings="false" useSourceFolders="false"/>
+    <storedRefactorings deprecationInfo="true" structuralOnly="false"/>
+    <selectedProjects/>
+    <manifest generateManifest="true" manifestLocation="/org.crossroad.sdi.adpater.lib/META-INF/MANIFEST.MF" manifestVersion="1.0" reuseManifest="false" saveManifest="true" usesManifest="true">
+        <sealing sealJar="true">
+            <packagesToSeal/>
+            <packagesToUnSeal/>
+        </sealing>
+    </manifest>
+    <selectedElements exportClassFiles="true" exportJavaFiles="false" exportOutputFolder="false">
+        <folder path="/org.crossroad.sdi.adpater.lib/META-INF"/>
+        <file path="/org.crossroad.sdi.adpater.lib/export.jardesc"/>
+        <javaElement handleIdentifier="=org.crossroad.sdi.adpater.lib/src"/>
+        <file path="/org.crossroad.sdi.adpater.lib/.classpath"/>
+        <file path="/org.crossroad.sdi.adpater.lib/.project"/>
+    </selectedElements>
+</jardesc>
