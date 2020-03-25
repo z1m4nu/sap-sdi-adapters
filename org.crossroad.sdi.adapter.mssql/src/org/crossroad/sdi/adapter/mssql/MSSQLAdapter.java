@@ -535,5 +535,17 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 		return getClass();
 	}
 
+	@Override
+	protected void postopen(RemoteSourceDescription arg0, boolean arg1) throws AdapterException {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	protected void preopen(RemoteSourceDescription arg0, boolean arg1) throws AdapterException {
+		// TODO Auto-generated method stub
+		
+	}
+
 
 }

@@ -1,21 +1,21 @@
 package org.crossroad.sdi.adapter.mssql;
 
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import org.crossroad.sdi.adapter.impl.AbstractJDBCAdapterFactory;
+import org.crossroad.sdi.adapter.impl.RequiredComponents;
+import org.osgi.framework.BundleContext;
 
 import com.sap.hana.dp.adapter.sdk.Adapter;
 import com.sap.hana.dp.adapter.sdk.AdapterException;
-import com.sap.hana.dp.adapter.sdk.AdapterFactory;
 import com.sap.hana.dp.adapter.sdk.RemoteSourceDescription;
 
-public class MSSQLAdapterFactory implements AdapterFactory {
-	static Logger logger = LogManager.getLogger(MSSQLAdapterFactory.class);
+public class MSSQLAdapterFactory extends AbstractJDBCAdapterFactory {
+
 	private static final String NAME = "JDBC - Microsoft SQL Server";
 
-	@Override
-	public Adapter createAdapterInstance() {
-		return new MSSQLAdapter();
+	public MSSQLAdapterFactory(BundleContext context) {
+		super(context);
 	}
+
 
 	@Override
 	public String getAdapterType() {
@@ -48,4 +48,20 @@ public class MSSQLAdapterFactory implements AdapterFactory {
 		// TODO Auto-generated method stub
 		return null;
 	}
+
+	@Override
+	public RequiredComponents getRequiredComponents() {
+		RequiredComponents components = new RequiredComponents();
+		components.addClass(new String[] {"com.microsoft.sqlserver.jdbc.SQLServerDriver"}, true);
+		components.addPatternLibrary("sqljdbc.*\\.jar");
+		components.addPatternLibrary("mssql-jdbc-.*\\.jar");
+		return components;
+	}
+
+	@Override
+	protected Adapter doCreateAdapterInstance() {
+		return new MSSQLAdapter();
+	}
+
+
 }
