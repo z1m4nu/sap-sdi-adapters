@@ -57,7 +57,7 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 	public static final String KEY_DATAMAPPING_FILE_DEFAULT = "mapping.properties";
 	
 	
-	public static final String MYSQL_JDBC_URL = "jdbc:mysql://%1$s:%2$s/%3$s?zeroDateTimeBehavior=convertToNull%4$s";
+	public static final String MYSQL_JDBC_URL = "jdbc:mysql://%1$s:%2$s/%3$s%4$s";
 	public static final String MYSQL_JDBC_CLASS = "com.mysql.jdbc.Driver";
 	private String schemaname_metadata = null;
 	private ResultSet bulkColumnsResultSet = null;
@@ -68,20 +68,6 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 	private MySQLDataTypeMapping mapping = new  MySQLDataTypeMapping();
 	
 	
-	@Override
-	public void open(RemoteSourceDescription connectionInfo, boolean isCDC) throws AdapterException {
-		// TODO Auto-generated method stub
-		super.open(connectionInfo, isCDC);
-		
-		PropertyGroup connectionGroup = connectionInfo.getConnectionProperties();
-		boolean customMapping = (connectionGroup.getPropertyEntry(KEY_DATAMAPPING) != null)
-				? AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(
-						connectionGroup.getPropertyEntry(KEY_DATAMAPPING).getValue())
-				: false;
-		
-						
-		mapping.init((customMapping?connectionGroup.getPropertyEntry(KEY_DATAMAPPING_FILE).getValue():null));
-	}
 
 
 	@Override
@@ -94,7 +80,7 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 			if (main.getPropertyEntry(AdapterConstants.KEY_OPTION) != null) {
 				option = main.getPropertyEntry(AdapterConstants.KEY_OPTION).getValue();
 				if (option != null && !option.isEmpty())
-					option = (new StringBuilder(String.valueOf('&'))).append(option).toString();
+					option = (new StringBuilder(String.valueOf('?'))).append(option).toString();
 			}
 			fmt = fmt.format(MYSQL_JDBC_URL,
 					new Object[] { main.getPropertyEntry(AdapterConstants.KEY_HOSTNAME).getValue(),
@@ -109,7 +95,7 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 			fmt.close();
 
 		}
-		logger.debug("JDBC URL ["+jdbcUrl+"]");
+		
 		return jdbcUrl;
 	}
 
@@ -171,7 +157,8 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 
 	@Override
 	protected void populateCFGDriverList(PropertyEntry drvList) throws AdapterException {
-		drvList.addChoice(MYSQL_JDBC_CLASS, MYSQL_JDBC_CLASS);
+		drvList.addChoice(MYSQL_JDBC_CLASS,"MySQL v5");
+		drvList.addChoice("com.mysql.cj.jdbc.Driver","MySQL v8");
 		drvList.setDefaultValue(MYSQL_JDBC_CLASS);
 
 	}
@@ -304,8 +291,8 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 		mappingDataChoice.addChoice(AdapterConstants.BOOLEAN_FALSE, AdapterConstants.BOOLEAN_FALSE);
 		mappingDataChoice.setDefaultValue(AdapterConstants.BOOLEAN_FALSE);
 		
-		PropertyEntry mappingFile = new PropertyEntry(KEY_DATAMAPPING_FILE, "Mapping file", "Mapping file", false);
-		mappingFile.setDefaultValue(KEY_DATAMAPPING_FILE);
+		PropertyEntry mappingFile = new PropertyEntry(KEY_DATAMAPPING_FILE, "Mapping file", "Mapping file", true);
+		mappingFile.setDefaultValue(KEY_DATAMAPPING_FILE_DEFAULT);
 		
 		mainGroup.addProperty(mappingDataChoice);
 		mainGroup.addProperty(mappingFile);
@@ -477,6 +464,24 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 		pstmt.setFetchSize(this.fetchSize);
 		this.resultSet = pstmt.executeQuery();
 		this.stmt = pstmt;
+	}
+
+	@Override
+	protected void postopen(RemoteSourceDescription arg0, boolean arg1) throws AdapterException {
+		PropertyGroup connectionGroup = arg0.getConnectionProperties();
+		boolean customMapping = (connectionGroup.getPropertyEntry(KEY_DATAMAPPING) != null)
+				? AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(
+						connectionGroup.getPropertyEntry(KEY_DATAMAPPING).getValue())
+				: false;
+		
+						
+		mapping.init((customMapping?connectionGroup.getPropertyEntry(KEY_DATAMAPPING_FILE).getValue():null));
+	}
+
+	@Override
+	protected void preopen(RemoteSourceDescription arg0, boolean arg1) throws AdapterException {
+		// TODO Auto-generated method stub
+		
 	}
 
 

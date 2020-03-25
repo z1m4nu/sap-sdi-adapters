@@ -1,18 +1,19 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
-Bundle-Name: org.crossroad.sdi.adapter
+Bundle-Name: Mysql
 Bundle-SymbolicName: org.crossroad.sdi.adapter.mysql
-Bundle-Version: 1.0.5
+Bundle-Version: 1.0.13
+Bundle-Activator: org.crossroad.sdi.adapter.mysql.Activator
 Bundle-RequiredExecutionEnvironment: JavaSE-1.8
-Require-Bundle: org.apache.log4j,
- org.crossroad.sdi.adapter
+Automatic-Module-Name: org.crossroad.sdi.adapter.mysql
+Require-Bundle: com.sap.hana.dp.adapterframework,org.antlr.runtime;bun
+ dle-version="3.2.0"
 Import-Package: com.sap.hana.dp.adapter.sdk,
  com.sap.hana.dp.adapter.sdk.parser,
  com.sap.hana.dp.adapter.sdk.parser.antlr,
- org.osgi.framework
+ org.apache.log4j;version="1.2.15",
+ org.osgi.framework;version="1.3.0"
 Bundle-ActivationPolicy: lazy
 Bundle-ClassPath: .,
- lib/mysql-connector-java-5.1.19-bin.jar
-DynamicImport-Package: com.mysql.jdbc.Driver
-Bundle-Vendor: Crossroad Inc
-Bundle-Activator: org.crossroad.sdi.adapter.mysql.Activator
+ lib/org.crossroad.sdi.adapter.lib_1.0.0.jar
+DynamicImport-Package: com.mysql.jdbc,org.gjt.mm.mysql

@@ -1,10 +1,7 @@
 /**
- * 
+ * (c) 2020 SAP SE or an SAP affiliate company. All rights reserved.
  */
 package org.crossroad.sdi.adapter.mysql;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
@@ -12,25 +9,25 @@ import org.osgi.framework.ServiceRegistration;
 
 import com.sap.hana.dp.adapter.sdk.AdapterFactory;
 
-/**
- * @author e.soden
- *
- */
-public class Activator implements BundleActivator {
+public class Activator  implements BundleActivator {
+
 	private static BundleContext context;
 
 	static BundleContext getContext() {
 		return context;
 	}
 
-	List<ServiceRegistration<?>> services = new ArrayList<ServiceRegistration<?>>();
+	ServiceRegistration<?> adapterRegistration;
+	
 	/*
 	 * (non-Javadoc)
 	 * @see org.osgi.framework.BundleActivator#start(org.osgi.framework.BundleContext)
 	 */
 	public void start(BundleContext bundleContext) throws Exception {
 		Activator.context = bundleContext;
-		services.add(context.registerService(AdapterFactory.class.getName(),new MySQLAdapterFactory() ,null));
+		MysqlFactory srv = new MysqlFactory(bundleContext);
+		adapterRegistration = context.registerService(AdapterFactory.class.getName(),srv ,null);
+		
 	}
 
 	/*
@@ -39,9 +36,7 @@ public class Activator implements BundleActivator {
 	 */
 	public void stop(BundleContext bundleContext) throws Exception {
 		Activator.context = null;
-		for(ServiceRegistration<?> service:services)
-		{
-			service.unregister();
-		}
+		adapterRegistration.unregister();
 	}
+
 }
