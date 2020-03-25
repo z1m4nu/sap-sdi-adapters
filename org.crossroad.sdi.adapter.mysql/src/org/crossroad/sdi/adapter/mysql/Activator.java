@@ -1,7 +1,7 @@
-package org.crossroad.sdi.adapter.mssql;
-
-import java.util.ArrayList;
-import java.util.List;
+/**
+ * (c) 2020 SAP SE or an SAP affiliate company. All rights reserved.
+ */
+package org.crossroad.sdi.adapter.mysql;
 
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
@@ -17,15 +17,17 @@ public class Activator  implements BundleActivator {
 		return context;
 	}
 
-	List<ServiceRegistration<?>> services = new ArrayList<ServiceRegistration<?>>();
+	ServiceRegistration<?> adapterRegistration;
+	
 	/*
 	 * (non-Javadoc)
 	 * @see org.osgi.framework.BundleActivator#start(org.osgi.framework.BundleContext)
 	 */
 	public void start(BundleContext bundleContext) throws Exception {
 		Activator.context = bundleContext;
-		MSSQLAdapterFactory srv = new MSSQLAdapterFactory(bundleContext);
-		services.add(context.registerService(AdapterFactory.class.getName(),srv ,null));	
+		MysqlFactory srv = new MysqlFactory(bundleContext);
+		adapterRegistration = context.registerService(AdapterFactory.class.getName(),srv ,null);
+		
 	}
 
 	/*
@@ -34,10 +36,7 @@ public class Activator  implements BundleActivator {
 	 */
 	public void stop(BundleContext bundleContext) throws Exception {
 		Activator.context = null;
-		for(ServiceRegistration<?> service:services)
-		{
-			service.unregister();
-		}
+		adapterRegistration.unregister();
 	}
 
 }

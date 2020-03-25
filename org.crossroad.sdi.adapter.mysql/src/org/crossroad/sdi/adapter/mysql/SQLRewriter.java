@@ -1,8 +1,9 @@
 /**
  * 
  */
-package org.crossroad.sdi.adapter.mssql;
+package org.crossroad.sdi.adapter.mysql;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -17,6 +18,7 @@ import org.crossroad.sdi.adapter.impl.FUNCTIONS;
 import org.crossroad.sdi.adapter.impl.UniqueNameTools;
 
 import com.sap.hana.dp.adapter.sdk.AdapterException;
+import com.sap.hana.dp.adapter.sdk.Timestamp;
 import com.sap.hana.dp.adapter.sdk.parser.ColumnReference;
 import com.sap.hana.dp.adapter.sdk.parser.Expression;
 import com.sap.hana.dp.adapter.sdk.parser.ExpressionBase;
@@ -47,6 +49,7 @@ public class SQLRewriter {
 	private Set<String> smalldatetimeCols = new HashSet<String>();
 	private Set<String> binaryCols = new HashSet<String>();
 	private Set<String> varbinaryCols = new HashSet<String>();
+
 	public SQLRewriter(int maxIdentifierLength) {
 		this.maxIdentifierLength = maxIdentifierLength;
 	}
@@ -198,11 +201,7 @@ public class SQLRewriter {
 		StringBuffer sql = new StringBuffer();
 
 		sql.append("SELECT ");
-		if (query.getLimit() != null) {
-			sql.append("TOP ");
-			sql.append(query.getLimit());
-			sql.append(" ");
-		}
+
 		if (query.getDistinct()) {
 			sql.append("DISTINCT ");
 		}
@@ -222,6 +221,22 @@ public class SQLRewriter {
 		if (query.getOrderBy() != null) {
 			sql.append(orderClauseBuilder(query.getOrderBy()));
 		}
+
+		try {
+			Method method = query.getClass().getMethod("getLimit", null);
+
+			Object value = method.invoke(query, null);
+			if (value != null) {
+				// if (query.getLimit() != null) {
+				sql.append(" LIMIT ");
+				// sql.append(query.getLimit());
+				sql.append(value.toString());
+				sql.append(" ");
+			}
+		} catch (Exception e) {
+			logger.error("Failed to retrieve Limit", e);
+		}
+
 		return sql.toString();
 	}
 
@@ -337,14 +352,14 @@ public class SQLRewriter {
 
 	protected String aliasRewriter(String alias) {
 		if (alias.length() <= this.maxIdentifierLength) {
-			return alias;
+			return alias.replace("\"", "");
 		}
 		String newAlias = (String) this.aliasMap.get(alias);
 		if (newAlias == null) {
 			newAlias = String.valueOf(this.aliasSeed++);
 			this.aliasMap.put(alias, newAlias);
 		}
-		return newAlias;
+		return newAlias.replace("\"", "");
 	}
 
 	protected String expressionBuilder(ExpressionBase val) throws AdapterException {
@@ -415,27 +430,27 @@ public class SQLRewriter {
 			break;
 		case IS_NULL:
 		case IS_NOT_NULL:
-			str.append(statementNULLBuilder((Expression)val));
+			str.append(statementNULLBuilder((Expression) val));
 			break;
 		case UNION_ALL:
 		case UNION_DISTINCT:
 		case INTERSECT:
 		case EXCEPT:
-			str.append(statementUNIONBuilder((Expression)val));
+			str.append(statementUNIONBuilder((Expression) val));
 			break;
 		case SELECT:
 		case QUERY:
-			str.append(statementSUBQUERYBuilder(((Expression)val)));
+			str.append(statementSUBQUERYBuilder(((Expression) val)));
 			break;
 		case DISTINCT:
-			statementDISTINCTBuilder((Expression)val);
+			statementDISTINCTBuilder((Expression) val);
 			break;
 		case BETWEEN:
 		case NOT_BETWEEN:
-			str.append(statementBETWEENBuilder((Expression)val));
+			str.append(statementBETWEENBuilder((Expression) val));
 			break;
 		case CONCAT:
-			str.append(statementCONCAT((Expression)val));
+			str.append(statementCONCAT((Expression) val));
 			break;
 		case NULL:
 		case DELETE:
@@ -449,7 +464,7 @@ public class SQLRewriter {
 		case CASE_CLAUSE:
 		case CASE_CLAUSES:
 		case CASE_ELSE:
-		//case ROW_NUMBER:
+			// case ROW_NUMBER:
 		case UNARY_POSITIVE:
 		case INSERT:
 		default:
@@ -466,28 +481,24 @@ public class SQLRewriter {
 		StringBuffer buffer = new StringBuffer();
 		buffer.setLength(0);
 
-		if (Type.BETWEEN.equals(expr.getType()))
-		{
+		if (Type.BETWEEN.equals(expr.getType())) {
 			buffer.append(" BETWEEN ");
-		} else 	if (Type.NOT_BETWEEN.equals(expr.getType()))
-		{
+		} else if (Type.NOT_BETWEEN.equals(expr.getType())) {
 			buffer.append(" NOT BETWEEN ");
-			
+
 		} else {
 			throw new AdapterException("Expression type [" + expr.getType().name()
-					+ "] not recognize as 'BETWEEN|NOT BETWEEN' statement.");			
+					+ "] not recognize as 'BETWEEN|NOT BETWEEN' statement.");
 		}
 
 		boolean first = true;
-		for(ExpressionBase base:expr.getOperands())
-		{
-			if( first)
-			{
+		for (ExpressionBase base : expr.getOperands()) {
+			if (first) {
 				first = false;
 			} else {
 				buffer.append(" AND ");
 			}
-			
+
 			buffer.append(expressionBuilder(base));
 		}
 
@@ -497,13 +508,11 @@ public class SQLRewriter {
 	private String statementCONCAT(Expression expr) throws AdapterException {
 		StringBuffer buffer = new StringBuffer();
 		buffer.setLength(0);
-		
+
 		buffer.append("CONCAT (");
 		boolean first = true;
-		for (ExpressionBase base: expr.getOperands())
-		{
-			if (first)
-			{
+		for (ExpressionBase base : expr.getOperands()) {
+			if (first) {
 				first = false;
 			} else {
 				buffer.append(',');
@@ -513,14 +522,13 @@ public class SQLRewriter {
 		buffer.append(")");
 		return buffer.toString();
 	}
-	
+
 	private String statementDISTINCTBuilder(Expression expr) throws AdapterException {
 		StringBuffer buffer = new StringBuffer();
 		buffer.setLength(0);
 
 		buffer.append("DISTINCT ");
-		for(ExpressionBase base:expr.getOperands())
-		{
+		for (ExpressionBase base : expr.getOperands()) {
 			buffer.append(expressionBuilder(base));
 		}
 		buffer.append(")");
@@ -548,19 +556,20 @@ public class SQLRewriter {
 			buffer.append(" UNION ALL ");
 		} else if (Type.UNION_DISTINCT.equals(expr.getType())) {
 			buffer.append(" UNION ");
-		} else if (Type.INTERSECT.equals(expr.getType())){
+		} else if (Type.INTERSECT.equals(expr.getType())) {
 			buffer.append(" INTERSECT ");
-		} else if (Type.EXCEPT.equals(expr.getType())){
+		} else if (Type.EXCEPT.equals(expr.getType())) {
 			buffer.append(" EXCEPT ");
 		} else {
-			throw new AdapterException("Expression type [" + expr.getType().name()
-					+ "] not recognize as 'UNION ALL|UNION' statement.");
+			throw new AdapterException(
+					"Expression type [" + expr.getType().name() + "] not recognize as 'UNION ALL|UNION' statement.");
 		}
 
 		buffer.append(regenerateSQL(expr.getOperands().get(1)));
-		
+
 		return buffer.toString();
 	}
+
 	private String statementNULLBuilder(Expression expr) throws AdapterException {
 		StringBuffer buffer = new StringBuffer();
 		buffer.setLength(0);
@@ -694,11 +703,9 @@ public class SQLRewriter {
 
 		switch (expr.getType()) {
 		case TIMESTAMP_LITERAL:
-			//buffer.append("{ts");
-			buffer.append("convert(datetime,");
-			buffer.append(MSSQLAdapterUtil.buidTS(MSSQLAdapterUtil.str2DT(_v)));
-			buffer.append(")");
-			//buffer.append("}");
+			buffer.append("TIMESTAMP ");
+			buffer.append(_v);
+			buffer.append("");
 			break;
 		default:
 			throw new AdapterException("Expression type [" + expr.getType().name() + "] is not supported.");
@@ -907,18 +914,9 @@ public class SQLRewriter {
 	 * @throws AdapterException
 	 */
 	private String tableNameBuilder(TableReference tabRef) throws AdapterException {
-		StringBuffer buffer = new StringBuffer();
-		String tabName = tabRef.getName();
-		if (tabName.contains(".")) {
-			buffer.append(MSSQLAdapterUtil.SQLTableBuilder(UniqueNameTools.build(tabName)));
-			//buffer.append(UniqueNameTools.build(tabName).getUniqueName());
-		} else if (tabRef.getDatabase() != null) {
-			buffer.append("[");
-			buffer.append(tabRef.getDatabase());
-			buffer.append("].");
-		}
-		return buffer.toString();
+		return UniqueNameTools.build(tabRef.getName()).getTable();
 	}
+
 	/**
 	 * 
 	 * @param columnName
@@ -926,9 +924,7 @@ public class SQLRewriter {
 	 */
 	private String columnNameBuilder(String columnName) {
 		StringBuffer buffer = new StringBuffer();
-		buffer.append("[");
 		buffer.append(columnName.replaceAll("\"", ""));
-		buffer.append("]");
 		return buffer.toString();
 	}
 

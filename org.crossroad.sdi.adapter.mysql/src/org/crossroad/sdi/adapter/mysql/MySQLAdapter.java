@@ -1,4 +1,7 @@
-package org.crossroad.sdi.adapter.mssql;
+/**
+ * 
+ */
+package org.crossroad.sdi.adapter.mysql;
 
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
@@ -9,7 +12,6 @@ import java.sql.Date;
 import java.sql.NClob;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -23,21 +25,16 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
 import org.crossroad.sdi.adapter.impl.AbstractJDBCAdapter;
 import org.crossroad.sdi.adapter.impl.AdapterConstants;
 import org.crossroad.sdi.adapter.impl.CapabilitiesUtils;
-import org.crossroad.sdi.adapter.impl.ColumnHelper;
 import org.crossroad.sdi.adapter.impl.RemoteSourceDescriptionFactory;
 import org.crossroad.sdi.adapter.impl.UniqueNameTools;
 
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.AdapterCapability;
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.ColumnCapability;
-import com.sap.hana.dp.adapter.sdk.AdapterConstant.DataType;
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.TableCapability;
 import com.sap.hana.dp.adapter.sdk.AdapterException;
-import com.sap.hana.dp.adapter.sdk.BrowseNode;
 import com.sap.hana.dp.adapter.sdk.Capabilities;
 import com.sap.hana.dp.adapter.sdk.Column;
 import com.sap.hana.dp.adapter.sdk.DataInfo;
@@ -51,33 +48,29 @@ import com.sap.hana.dp.adapter.sdk.TableMetadata;
 import com.sap.hana.dp.adapter.sdk.parser.ExpressionBase;
 
 /**
- * MSSQLAdapter Adapter.
+ * @author e.soden
+ *
  */
-public class MSSQLAdapter extends AbstractJDBCAdapter {
-	static Logger logger = LogManager.getLogger(MSSQLAdapter.class);
-	public static final String MSSQL_JDBC_URL = "jdbc:sqlserver://%1$s:%2$s;databaseName=%3$s%4$s";
-	public static final String MSSQL_JDBC_CLASS = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
+public class MySQLAdapter extends AbstractJDBCAdapter {
+	public static final String KEY_DATAMAPPING = "jdbc.datamapping";
+	public static final String KEY_DATAMAPPING_FILE = "jdbc.datamapping.file";
+	public static final String KEY_DATAMAPPING_FILE_DEFAULT = "mapping.properties";
+	
+	
+	public static final String MYSQL_JDBC_URL = "jdbc:mysql://%1$s:%2$s/%3$s%4$s";
+	public static final String MYSQL_JDBC_CLASS = "com.mysql.jdbc.Driver";
 	private String schemaname_metadata = null;
 	private ResultSet bulkColumnsResultSet = null;
 	private PreparedStatement pstmt = null;
-	protected ExpressionBase.Type pstmtType = ExpressionBase.Type.QUERY;
-	private ColumnHelper columnHelper = new ColumnHelper();
-	private UniqueNameTools tools = null;
 	private SQLRewriter sqlRewriter = new SQLRewriter(128);
+	protected ExpressionBase.Type pstmtType = ExpressionBase.Type.QUERY;
+	
+	private MySQLDataTypeMapping mapping = new  MySQLDataTypeMapping();
+	
+	
+
 
 	@Override
-	protected void populateCFGDriverList(PropertyEntry drvList) throws AdapterException {
-		drvList.addChoice(MSSQL_JDBC_CLASS, MSSQL_JDBC_CLASS);
-		drvList.setDefaultValue(MSSQL_JDBC_CLASS);
-	}
-
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see
-	 * org.crossroad.sdi.adapter.impl.IJDBCAdapter#getJdbcUrl(com.sap.hana.dp.
-	 * adapter.sdk.PropertyGroup)
-	 */
 	public String getJdbcUrl(PropertyGroup main) throws AdapterException {
 		String option;
 		Formatter fmt = new Formatter();
@@ -87,9 +80,9 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 			if (main.getPropertyEntry(AdapterConstants.KEY_OPTION) != null) {
 				option = main.getPropertyEntry(AdapterConstants.KEY_OPTION).getValue();
 				if (option != null && !option.isEmpty())
-					option = (new StringBuilder(String.valueOf(';'))).append(option).toString();
+					option = (new StringBuilder(String.valueOf('?'))).append(option).toString();
 			}
-			fmt = fmt.format(MSSQL_JDBC_URL,
+			fmt = fmt.format(MYSQL_JDBC_URL,
 					new Object[] { main.getPropertyEntry(AdapterConstants.KEY_HOSTNAME).getValue(),
 							main.getPropertyEntry(AdapterConstants.KEY_PORT).getValue(),
 							main.getPropertyEntry(AdapterConstants.KEY_DATABASE).getValue(),
@@ -102,9 +95,15 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 			fmt.close();
 
 		}
-		logger.debug("JDBC URL ["+jdbcUrl+"]");
+		
 		return jdbcUrl;
 	}
+
+	@Override
+	public Class getLoggerName() {
+		return getClass();
+	}
+
 
 	/*
 	 * (non-Javadoc)
@@ -120,7 +119,7 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 	}
 
 	private void closeBulkResult() {
-		logger.debug("Closing MSSSQL ResultSet object");
+		logger.debug("Closing MySQL ResultSet object");
 		try {
 			if (bulkColumnsResultSet != null)
 				bulkColumnsResultSet.close();
@@ -132,7 +131,7 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 	}
 
 	private void closePrepareStatement() {
-		logger.debug("Closing MSSSQL Preparestatement object");
+		logger.debug("Closing MySQL Preparestatement object");
 		if (this.pstmt != null) {
 			try {
 				this.pstmt.close();
@@ -143,117 +142,57 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 		}
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see
-	 * org.crossroad.sdi.adapter.impl.IJDBCAdapter#rewriteSQL(java.lang.String)
-	 */
+
+	@Override
 	public String rewriteSQL(String sqlstatement) throws AdapterException {
 		logger.debug("rewriteSQL simple [" + sqlstatement + "]");
 		return null;
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.crossroad.sdi.adapter.impl.IJDBCAdapter#doCloseResultSet()
-	 */
+	@Override
 	public void doCloseResultSet() throws AdapterException {
 		logger.debug("In the function doCloseResultSet");
 
 	}
 
-	/**
-	 * 
-	 * @return
-	 * @throws SQLException
-	 */
-	private BrowseNode createNodeFromResultSet() throws SQLException {
-		BrowseNode node = null;
-		String catalogname_metadata = this.browseResultSet.getString(1);
-		if (catalogname_metadata == null) {
-			catalogname_metadata = "<none>";
-		}
-		if ((this.listSystemData) || ((!this.listSystemData) && (!catalogname_metadata.startsWith("db_")))) {
-			String displayName = null;
-			String description = null;
-			String uniquename = null;
-			boolean expandable = false;
-			boolean importable = true;
-			if (this.nodeID == null) {
-				displayName = catalogname_metadata;
-				uniquename = catalogname_metadata;
-				expandable = true;
-				importable = false;
-			} else {
-				this.schemaname_metadata = this.browseResultSet.getString(2);
-				if (this.schemaname_metadata == null) {
-					this.schemaname_metadata = "<none>";
-				}
-				displayName = this.browseResultSet.getString(3).replaceAll("\"\\.\"", "\"\\.\\.\"");
-				description = this.browseResultSet.getString(5);
-				uniquename = catalogname_metadata + "." + this.schemaname_metadata + "." + displayName;
-			}
-			ResultSetMetaData data = this.browseResultSet.getMetaData();
-			StringBuffer buffer = new StringBuffer();
-			for (int col = 1; col < data.getColumnCount(); col++) {
-				buffer.append("Column [");
-				buffer.append(col);
-				buffer.append("] - ");
-				buffer.append("Name [");
-				buffer.append(data.getColumnLabel(col));
-				buffer.append("] - ");
-				buffer.append("Value [");
-				buffer.append(this.browseResultSet.getString(col));
-				buffer.append("]\n");
-			}
+	@Override
+	protected void populateCFGDriverList(PropertyEntry drvList) throws AdapterException {
+		drvList.addChoice(MYSQL_JDBC_CLASS,"MySQL v5");
+		drvList.addChoice("com.mysql.cj.jdbc.Driver","MySQL v8");
+		drvList.setDefaultValue(MYSQL_JDBC_CLASS);
 
-			logger.debug("createNodeFromResultSet\n" + buffer.toString());
-
-			tools = UniqueNameTools.build(uniquename);
-
-			node = new BrowseNode(uniquename, displayName);
-
-			node.setImportable(importable);
-			node.setExpandable(expandable);
-			node.setDescription(description);
-		}
-		return node;
-	}
-
-	/**
-	 * 
-	 */
-	public RemoteSourceDescription getRemoteSourceDescription() throws AdapterException {
-		RemoteSourceDescription rs = new RemoteSourceDescription();
-		PropertyGroup mainGroup = RemoteSourceDescriptionFactory.getBasicJDBCConnectionGroup();
-		mainGroup.setDisplayName("Microsoft SQL Server connection definition");
-
-		PropertyEntry drvList = new PropertyEntry("jdbc.driverclass", "Driver class",
-				"Select the driver class to load");
-		populateCFGDriverList(drvList);
-		mainGroup.addProperty(drvList);
-
-		rs.setCredentialProperties(RemoteSourceDescriptionFactory.getCredentialProperties());
-		rs.setConnectionProperties(mainGroup);
-		return rs;
 	}
 
 	/**
 	 * 
 	 */
 	public Capabilities<AdapterCapability> getCapabilities(String version) throws AdapterException {
-		Capabilities<AdapterCapability> capbility = new Capabilities<AdapterCapability>();
+		Capabilities<AdapterCapability> capability = new Capabilities<AdapterCapability>();
 		List<AdapterCapability> capabilities = new ArrayList<AdapterCapability>();
 
 		capabilities.addAll(CapabilitiesUtils.getBICapabilities());
 		capabilities.addAll(CapabilitiesUtils.getSelectCapabilities());
 
-		capbility.setCapabilities(capabilities);
-		capbility.setCapability(AdapterCapability.CAP_COLUMN_CAP);
-		capbility.setCapability(AdapterCapability.CAP_TABLE_CAP);
-		return capbility;
+		capability.setCapabilities(capabilities);
+		capability.setCapability(AdapterCapability.CAP_COLUMN_CAP);
+		capability.setCapability(AdapterCapability.CAP_TABLE_CAP);
+		
+		capability.setCapability(AdapterCapability.CAP_SELECT);
+		capability.setCapability(AdapterCapability.CAP_AND);
+		capability.setCapability(AdapterCapability.CAP_PROJECT);
+		capability.setCapability(AdapterCapability.CAP_LIMIT);
+		capability.setCapability(AdapterCapability.CAP_LIMIT_ARG);
+		capability.setCapability(AdapterCapability.CAP_TRANSACTIONAL_CDC);
+		capability.setCapability(AdapterCapability.CAP_BIGINT_BIND);
+		capability.setCapability(AdapterCapability.CAP_METADATA_ATTRIBUTE);
+		capability.setCapability(AdapterCapability.CAP_WHERE);
+		capability.setCapability(AdapterCapability.CAP_SIMPLE_EXPR_IN_WHERE);
+		capability.setCapability(AdapterCapability.CAP_AND_DIFFERENT_COLUMNS);
+		capability.setCapability(AdapterCapability.CAP_LIKE);
+		capability.setCapability(AdapterCapability.CAP_NONEQUAL_COMPARISON);
+		capability.setCapability(AdapterCapability.CAP_AGGREGATES);
+		
+		return capability;
 	}
 
 	@Override
@@ -272,20 +211,13 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 		return data;
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.crossroad.sdi.adapter.impl.AbstractJDBCAdapter#
-	 * updateTableMetaDataColumns(org.crossroad.sdi.adapter.impl.
-	 * UniqueNameTools)
-	 */
 	protected List<Column> updateTableMetaDataColumns(UniqueNameTools tools) throws AdapterException {
 		DatabaseMetaData meta = null;
 		ResultSet rsColumns = null;
 
 		List<Column> cols = new ArrayList<Column>();
 		try {
-			logger.debug("Create unique key list for [" + MSSQLAdapterUtil.SQLTableBuilder(tools) + "]");
+			logger.debug("Create unique key list for [" + tools.getTable() + "]");
 			meta = connection.getMetaData();
 
 			rsColumns = meta.getColumns(tools.getCatalog(), tools.getSchema(), tools.getTable(), null);
@@ -298,17 +230,13 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 				int nullable = rsColumns.getInt("NULLABLE");
 				int scale = rsColumns.getInt("DECIMAL_DIGITS");
 				String columnDesc = rsColumns.getString("REMARKS");
-
-				int mssqlTypeId = MssqlToHanaTypeMap.getMssqlTypeId(columnType, typeName);
-				DataType hanaDataType = MssqlToHanaTypeMap.getHanaDatatype(mssqlTypeId, size, true);
-
-				Column column = new Column(columnName, hanaDataType);
-				MssqlToHanaTypeMap.setDatatypeParameters(column, mssqlTypeId, size, size, scale);
+				
+				//Column column = MySQLHANAType.buildMySQLColumn(columnName, columnType, typeName, size, size, scale);
+				Column column = mapping.createColumn(columnName, columnType, typeName, size, size, scale);
 				column.setDescription(columnDesc);
 				column.setNullable(nullable == 1);
 
-				columnHelper.addColumn(column, mssqlTypeId);
-
+				columnHelper.addColumn(column, columnType);
 				Capabilities<ColumnCapability> columnCaps = new Capabilities<ColumnCapability>();
 				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_BETWEEN);
 				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_FILTER);
@@ -324,28 +252,7 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 
 				cols.add(column);
 
-				// String Builder
-				StringBuilder builder = new StringBuilder("column [");
-				builder.append(columnName);
-				builder.append("] - JDBC Type [");
-				builder.append(columnType);
-				builder.append("] - MSSQL Type [");
-				builder.append(mssqlTypeId);
-				builder.append("] - HANA Type [");
-				builder.append(hanaDataType.name() + " (" + hanaDataType.getValue() + ")");
-				builder.append("] name [");
-				builder.append(typeName);
-				builder.append("] Length [");
-				builder.append(column.getLength());
-				builder.append("] NativeLength [");
-				builder.append(column.getNativeLength());
-				builder.append("] Precision [");
-				builder.append(column.getPrecision());
-				builder.append("] NativePrecision [");
-				builder.append(column.getNativePrecision());
-				builder.append("]");
 
-				logger.debug(builder.toString());
 
 			}
 
@@ -365,6 +272,36 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 
 		return cols;
 	}
+	@Override
+	public RemoteSourceDescription getRemoteSourceDescription() throws AdapterException {
+		RemoteSourceDescription rs = new RemoteSourceDescription();
+		PropertyGroup mainGroup = RemoteSourceDescriptionFactory.getBasicJDBCConnectionGroup();
+		mainGroup.setDisplayName("MySQL Server connection definition");
+
+
+		PropertyEntry drvList = new PropertyEntry("jdbc.driverclass", "Driver class",
+				"Select the driver class to load");
+		populateCFGDriverList(drvList);
+		mainGroup.addProperty(drvList);
+
+		
+		PropertyEntry mappingDataChoice = new PropertyEntry(KEY_DATAMAPPING, "Use custom data mapping",
+				"", false);
+		mappingDataChoice.addChoice(AdapterConstants.BOOLEAN_TRUE, AdapterConstants.BOOLEAN_TRUE);
+		mappingDataChoice.addChoice(AdapterConstants.BOOLEAN_FALSE, AdapterConstants.BOOLEAN_FALSE);
+		mappingDataChoice.setDefaultValue(AdapterConstants.BOOLEAN_FALSE);
+		
+		PropertyEntry mappingFile = new PropertyEntry(KEY_DATAMAPPING_FILE, "Mapping file", "Mapping file", true);
+		mappingFile.setDefaultValue(KEY_DATAMAPPING_FILE_DEFAULT);
+		
+		mainGroup.addProperty(mappingDataChoice);
+		mainGroup.addProperty(mappingFile);
+		
+		rs.setCredentialProperties(RemoteSourceDescriptionFactory.getCredentialProperties());
+		rs.setConnectionProperties(mainGroup);
+		return rs;
+	}
+
 
 	/**
 	 * 
@@ -442,7 +379,7 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 		Map<String, Set<String>> specialTypes = generateSpecialTypeMap(info);
 		try {
 			String pstmtStr = rewriteSQL(sqlstatement, specialTypes);
-			logger.info("MS SQL Statement [" + pstmtStr + "]");
+			logger.info("MySQL Statement [" + pstmtStr + "]");
 			info.setExecuteStatement(pstmtStr);
 			this.connection.setAutoCommit(false);
 			this.pstmt = this.connection.prepareStatement(pstmtStr);
@@ -530,15 +467,15 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 	}
 
 	@Override
-	public Class getLoggerName() {
-		// TODO Auto-generated method stub
-		return getClass();
-	}
-
-	@Override
 	protected void postopen(RemoteSourceDescription arg0, boolean arg1) throws AdapterException {
-		// TODO Auto-generated method stub
+		PropertyGroup connectionGroup = arg0.getConnectionProperties();
+		boolean customMapping = (connectionGroup.getPropertyEntry(KEY_DATAMAPPING) != null)
+				? AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(
+						connectionGroup.getPropertyEntry(KEY_DATAMAPPING).getValue())
+				: false;
 		
+						
+		mapping.init((customMapping?connectionGroup.getPropertyEntry(KEY_DATAMAPPING_FILE).getValue():null));
 	}
 
 	@Override
