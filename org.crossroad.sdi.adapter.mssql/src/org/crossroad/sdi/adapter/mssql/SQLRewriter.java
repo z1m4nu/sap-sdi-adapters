@@ -14,6 +14,7 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.crossroad.sdi.adapter.impl.ColumnHelper;
 import org.crossroad.sdi.adapter.impl.FUNCTIONS;
+import org.crossroad.sdi.adapter.impl.ISQLRewriter;
 import org.crossroad.sdi.adapter.impl.UniqueNameTools;
 
 import com.sap.hana.dp.adapter.sdk.AdapterException;
@@ -32,26 +33,22 @@ import com.sap.hana.dp.adapter.sdk.parser.TableReference;
  * @author e.soden
  *
  */
-public class SQLRewriter {
+public class SQLRewriter implements ISQLRewriter{
 	private Logger logger = LogManager.getLogger(SQLRewriter.class);
 	private final int maxIdentifierLength;
 	private final Map<String, String> schemaAliasReplacements = new HashMap<String, String>();
 	private char aliasSeed = 'A';
 	private ExpressionBase.Type queryType = ExpressionBase.Type.QUERY;
 	private Map<String, String> aliasMap = new HashMap<String, String>();
-	private boolean isDateTime = false;
-	private boolean isSmallDateTime = false;
-	private boolean isBinary = false;
-	private boolean isVarBinary = false;
-	private Set<String> datetimeCols = new HashSet<String>();
-	private Set<String> smalldatetimeCols = new HashSet<String>();
-	private Set<String> binaryCols = new HashSet<String>();
-	private Set<String> varbinaryCols = new HashSet<String>();
+
+	private ColumnHelper helper = null;
+	
 	public SQLRewriter(int maxIdentifierLength) {
 		this.maxIdentifierLength = maxIdentifierLength;
 	}
 
 	public void setColumnHelper(ColumnHelper helper) {
+		this.helper = helper;
 	}
 
 	public SQLRewriter(int maxIdentifierLength, String schemaAlias, String schemaAliasReplacement) {
@@ -70,41 +67,17 @@ public class SQLRewriter {
 	}
 
 	private void cleanUp() {
-		if (this.datetimeCols != null) {
-			this.datetimeCols.clear();
-		}
-		if (this.smalldatetimeCols != null) {
-			this.smalldatetimeCols.clear();
-		}
-		if (this.binaryCols != null) {
-			this.binaryCols.clear();
-		}
-		if (this.varbinaryCols != null) {
-			this.varbinaryCols.clear();
-		}
+		
 	}
 
-	public String rewriteSQL(String sql, Map<String, Set<String>> specialTypes, ColumnHelper helper)
+	public String rewriteSQL(String sql)
 			throws AdapterException {
 
 		logger.debug("Rewrite SQL [" + sql + "]");
 
 		cleanUp();
 
-		if (specialTypes != null) {
-			if (specialTypes.containsKey("DATETIME")) {
-				this.datetimeCols = specialTypes.get("DATETIME");
-			}
-			if (specialTypes.containsKey("SMALLDATETIME")) {
-				this.smalldatetimeCols = specialTypes.get("SMALLDATETIME");
-			}
-			if (specialTypes.containsKey("BINARY")) {
-				this.binaryCols = specialTypes.get("BINARY");
-			}
-			if (specialTypes.containsKey("VARBINARY")) {
-				this.varbinaryCols = specialTypes.get("VARBINARY");
-			}
-		}
+	
 		List<ExpressionParserMessage> messageList = new ArrayList<ExpressionParserMessage>();
 		try {
 			ExpressionBase query = ExpressionParserUtil.buildQuery(sql, messageList);
@@ -328,7 +301,6 @@ public class SQLRewriter {
 		StringBuffer str = new StringBuffer();
 		ColumnReference col = (ColumnReference) exp;
 		String colName = col.getColumnName().substring(1, col.getColumnName().length() - 1);
-		checkSpecialType(colName);
 		str.append(columnNameBuilder(col.getColumnName()));
 		str.append(" = ");
 		str.append(expressionBuilder(col.getColumnValueExp()));
@@ -359,7 +331,6 @@ public class SQLRewriter {
 			if (columnReference.getTableName() != null) {
 				str.append(columnNameBuilder(aliasRewriter(columnReference.getTableName())) + ".");
 			}
-			checkSpecialType(columnReference.getColumnName());
 			str.append(columnNameBuilder(columnReference.getColumnName()));
 			break;
 		case AND:
@@ -953,19 +924,4 @@ public class SQLRewriter {
 		return str;
 	}
 
-	private void checkSpecialType(String columnName) {
-		String colName = columnName.replaceAll("\"", "");
-		if ((this.datetimeCols != null) && (this.datetimeCols.contains(colName))) {
-			this.isDateTime = true;
-		}
-		if ((this.smalldatetimeCols != null) && (this.smalldatetimeCols.contains(colName))) {
-			this.isSmallDateTime = true;
-		}
-		if ((this.binaryCols != null) && (this.binaryCols.contains(colName))) {
-			this.isBinary = true;
-		}
-		if ((this.varbinaryCols != null) && (this.varbinaryCols.contains(colName))) {
-			this.isVarBinary = true;
-		}
-	}
 }

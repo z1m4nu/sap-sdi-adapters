@@ -1,5 +1,6 @@
 package org.crossroad.sdi.adapter.mssql;
 
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.sql.Blob;
@@ -29,6 +30,7 @@ import org.crossroad.sdi.adapter.impl.AbstractJDBCAdapter;
 import org.crossroad.sdi.adapter.impl.AdapterConstants;
 import org.crossroad.sdi.adapter.impl.CapabilitiesUtils;
 import org.crossroad.sdi.adapter.impl.ColumnHelper;
+import org.crossroad.sdi.adapter.impl.ISQLRewriter;
 import org.crossroad.sdi.adapter.impl.RemoteSourceDescriptionFactory;
 import org.crossroad.sdi.adapter.impl.UniqueNameTools;
 
@@ -366,71 +368,7 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 		return cols;
 	}
 
-	/**
-	 * 
-	 * @param info
-	 * @return
-	 */
-	private Map<String, Set<String>> generateSpecialTypeMap(StatementInfo info) {
-		Map<String, List<Parameter>> attributes = info.getAttributes();
-		Set<String> datetimeCols = new HashSet<String>();
-		Set<String> smalldatetimeCols = new HashSet<String>();
-		Set<String> binaryCols = new HashSet<String>();
-		Set<String> varbinaryCols = new HashSet<String>();
-		if (attributes != null && !attributes.isEmpty()) {
-			Iterator<Entry<String, List<Parameter>>> iter = attributes.entrySet().iterator();
-
-			while (iter.hasNext()) {
-				Entry<String, List<Parameter>> entry = iter.next();
-				for (int i = 0; i < ((List<Parameter>) entry.getValue()).size(); i++) {
-					if (((Parameter) ((List<Parameter>) entry.getValue()).get(i)).toString()
-							.startsWith("Parameter DATETIME=_dt+_")) {
-						String tmp = ((Parameter) ((List<Parameter>) entry.getValue()).get(i)).toString();
-						String _datetimeCols[] = tmp.split("_dt\\+_");
-						for (int j = 1; j < _datetimeCols.length; j++)
-							datetimeCols.add(_datetimeCols[j]);
-
-					}
-					if (((Parameter) ((List<Parameter>) entry.getValue()).get(i)).toString()
-							.startsWith("Parameter SMALLDATETIME=_sdt+_")) {
-						String tmp = ((Parameter) ((List<Parameter>) entry.getValue()).get(i)).toString();
-						String _smalldatetimeCols[] = tmp.split("_sdt\\+_");
-						for (int j = 1; j < _smalldatetimeCols.length; j++)
-							smalldatetimeCols.add(_smalldatetimeCols[j]);
-
-					}
-					if (((Parameter) ((List<Parameter>) entry.getValue()).get(i)).toString()
-							.startsWith("Parameter BINARY=_by+_")) {
-						String tmp = ((Parameter) ((List<Parameter>) entry.getValue()).get(i)).toString();
-						String _binaryCols[] = tmp.split("_by\\+_");
-						for (int j = 1; j < _binaryCols.length; j++)
-							binaryCols.add(_binaryCols[j]);
-
-					}
-					if (((Parameter) ((List<Parameter>) entry.getValue()).get(i)).toString()
-							.startsWith("Parameter VARBINARY=_vby+_")) {
-						String tmp = ((Parameter) ((List<Parameter>) entry.getValue()).get(i)).toString();
-						String _varbinaryCols[] = tmp.split("_vby\\+_");
-						for (int j = 1; j < _varbinaryCols.length; j++)
-							varbinaryCols.add(_varbinaryCols[j]);
-
-					}
-				}
-
-			}
-		}
-		Map<String, Set<String>> specialTypes = new HashMap<String, Set<String>>();
-		if (datetimeCols != null)
-			specialTypes.put("DATETIME", datetimeCols);
-		if (smalldatetimeCols != null)
-			specialTypes.put("SMALLDATETIME", smalldatetimeCols);
-		if (binaryCols != null)
-			specialTypes.put("BINARY", binaryCols);
-		if (varbinaryCols != null)
-			specialTypes.put("VARBINARY", varbinaryCols);
-		return specialTypes;
-	}
-
+	
 	/*
 	 * (non-Javadoc)
 	 * 
@@ -439,10 +377,10 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 	 * lang.String, com.sap.hana.dp.adapter.sdk.StatementInfo)
 	 */
 	public void executeStatement(String sqlstatement, StatementInfo info) throws AdapterException {
-		Map<String, Set<String>> specialTypes = generateSpecialTypeMap(info);
 		try {
-			String pstmtStr = rewriteSQL(sqlstatement, specialTypes);
+			String pstmtStr = rewriteSQL(sqlstatement);
 			logger.info("MS SQL Statement [" + pstmtStr + "]");
+			this.pstmtType = sqlRewriter.getQueryType();
 			info.setExecuteStatement(pstmtStr);
 			this.connection.setAutoCommit(false);
 			this.pstmt = this.connection.prepareStatement(pstmtStr);
@@ -452,13 +390,6 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 		}
 	}
 
-	protected String rewriteSQL(String sql, Map<String, Set<String>> specialTypes) throws AdapterException {
-		logger.debug("rewriteSQL [" + sql + "]");
-		String rewritesqlstr = sqlRewriter.rewriteSQL(sql, specialTypes, columnHelper);
-
-		this.pstmtType = sqlRewriter.getQueryType();
-		return rewritesqlstr;
-	}
 
 	private void executeSelectStatement(PreparedStatement pstmt, StatementInfo info) throws SQLException {
 		List<DataInfo> params = info.getParams();
@@ -535,16 +466,28 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 		return getClass();
 	}
 
+
 	@Override
-	protected void postopen(RemoteSourceDescription arg0, boolean arg1) throws AdapterException {
+	protected InputStream getMappingFile() throws Exception {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	protected void preopen() throws AdapterException {
 		// TODO Auto-generated method stub
 		
 	}
 
 	@Override
-	protected void preopen(RemoteSourceDescription arg0, boolean arg1) throws AdapterException {
+	protected void postopen() throws AdapterException {
 		// TODO Auto-generated method stub
 		
+	}
+
+	@Override
+	protected ISQLRewriter getSQLRewriter() {
+		return this.sqlRewriter;
 	}
 
 
