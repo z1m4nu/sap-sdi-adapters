@@ -1,7 +1,6 @@
 package org.crossroad.sdi.adapter.impl;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
@@ -20,6 +19,8 @@ import java.sql.Date;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.DriverPropertyInfo;
+import java.sql.NClob;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -27,7 +28,6 @@ import java.sql.Statement;
 import java.sql.Time;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
@@ -38,8 +38,8 @@ import org.apache.log4j.Logger;
 import com.sap.hana.dp.adapter.sdk.Adapter;
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.AdapterCapability;
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.ColumnCapability;
-import com.sap.hana.dp.adapter.sdk.AdapterConstant.DataType;
 import com.sap.hana.dp.adapter.sdk.AdapterConstant.LobCharset;
+import com.sap.hana.dp.adapter.sdk.AdapterConstant.TableCapability;
 import com.sap.hana.dp.adapter.sdk.AdapterException;
 import com.sap.hana.dp.adapter.sdk.AdapterRow;
 import com.sap.hana.dp.adapter.sdk.AdapterRowSet;
@@ -50,6 +50,7 @@ import com.sap.hana.dp.adapter.sdk.Column;
 import com.sap.hana.dp.adapter.sdk.CredentialEntry;
 import com.sap.hana.dp.adapter.sdk.CredentialProperties;
 import com.sap.hana.dp.adapter.sdk.DataDictionary;
+import com.sap.hana.dp.adapter.sdk.DataInfo;
 import com.sap.hana.dp.adapter.sdk.FunctionMetadata;
 import com.sap.hana.dp.adapter.sdk.Index;
 import com.sap.hana.dp.adapter.sdk.Metadata;
@@ -64,6 +65,7 @@ import com.sap.hana.dp.adapter.sdk.StatementInfo;
 import com.sap.hana.dp.adapter.sdk.TableMetadata;
 import com.sap.hana.dp.adapter.sdk.Timestamp;
 import com.sap.hana.dp.adapter.sdk.UniqueKey;
+import com.sap.hana.dp.adapter.sdk.parser.ExpressionBase;
 
 /**
  * This is a sample adapter that connects to a database with jdbc driver. You
@@ -89,7 +91,16 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	protected HashMap<Long, InputStream> blobHandle;
 	protected HashMap<Long, Reader> clobHandle;
 
+	protected RemoteSourceDescription connectionInfo = null;
+	protected boolean isCDC = false;
+
+	protected ColumnBuilder columnBuilder = new ColumnBuilder();
+
 	private List<String> tablesType = new ArrayList<String>();
+	protected ExpressionBase.Type pstmtType = ExpressionBase.Type.QUERY;
+
+	private PreparedStatement pstmt = null;
+	private ResultSet bulkColumnsResultSet = null;
 
 	public AbstractJDBCAdapter() {
 		super();
@@ -100,56 +111,6 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 		 */
 		// logger.setLevel(Level.DEBUG);
 
-	}
-
-	/**
-	 * UI Information. Provide variables that user need to provide value required to
-	 * create a connection to underlying database system. For example: Username,
-	 * password, database name, etc. Note this method is called once and cached in a
-	 * table. You can invoke the stored procedure to get the list call
-	 * "PUBLIC"."DATAPROV_ADAPTER_SERVICE"('ui' ,'AbstractJDBCAdapter', '', ?, ?, ?)
-	 */
-	@Override
-	public RemoteSourceDescription getRemoteSourceDescription() throws AdapterException {
-		logger.debug("Retrieve remote source description");
-		RemoteSourceDescription rs = new RemoteSourceDescription();
-		PropertyGroup mainGroup = new PropertyGroup(AdapterConstants.KEY_GROUP_MAIN, "JBDC Configuration");
-
-		PropertyEntry entry = new PropertyEntry(AdapterConstants.KEY_THIRDPARTY, "Use thirdparty JDBC", "Expert mode");
-		entry.addChoice(AdapterConstants.BOOLEAN_TRUE, AdapterConstants.BOOLEAN_TRUE);
-		entry.addChoice(AdapterConstants.BOOLEAN_FALSE, AdapterConstants.BOOLEAN_FALSE);
-		entry.setDefaultValue(AdapterConstants.BOOLEAN_FALSE);
-
-		/*
-		 * Driver list
-		 */
-		PropertyEntry drvList = new PropertyEntry(AdapterConstants.KEY_DRIVERCLASS, "Driver class",
-				"Select the driver class to load");
-		populateCFGDriverList(drvList);
-		drvList.addDependency(entry, AdapterConstants.BOOLEAN_FALSE);
-
-		/*
-		 * Expert mode configuration
-		 */
-		PropertyGroup expertGroup = RemoteSourceDescriptionFactory.getExpertGroup();
-
-		entry.getPropertyDependencies().put(expertGroup, AdapterConstants.BOOLEAN_TRUE);
-		mainGroup.addProperty(expertGroup);
-
-		/*
-		 * Add to main group
-		 */
-		mainGroup.addProperty(entry);
-		mainGroup.addProperty(drvList);
-		mainGroup.addProperty(RemoteSourceDescriptionFactory.getBasicJDBCConnectionGroup());
-		/*
-		 * Deciding of the load
-		 */
-
-		rs.setCredentialProperties(RemoteSourceDescriptionFactory.getCredentialProperties());
-		rs.setConnectionProperties(mainGroup);
-
-		return rs;
 	}
 
 	protected abstract void populateCFGDriverList(PropertyEntry drvList) throws AdapterException;
@@ -167,7 +128,10 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	@Override
 	public void open(RemoteSourceDescription connectionInfo, boolean isCDC) throws AdapterException {
 
-		preopen(connectionInfo, isCDC);
+		this.connectionInfo = connectionInfo;
+		this.isCDC = isCDC;
+
+		preopen();
 
 		String username = "";
 		String password = "";
@@ -189,8 +153,6 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 
 		PropertyGroup connectionGroup = connectionInfo.getConnectionProperties();
 
-		PropertyEntry expertMode = connectionGroup.getPropertyEntry(AdapterConstants.KEY_THIRDPARTY);
-
 		listSystemData = (connectionGroup.getPropertyEntry(AdapterConstants.KEY_WITHSYS) != null)
 				? AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(
 						connectionGroup.getPropertyEntry(AdapterConstants.KEY_WITHSYS).getValue())
@@ -201,18 +163,14 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 						connectionGroup.getPropertyEntry(AdapterConstants.KEY_NULLASEMPTYSTRING).getValue())
 				: false;
 
-		String jdbcUrl = null;
-		String jdbcClass = null;
+		String jdbcUrl = getJdbcUrl(connectionGroup);
+		String jdbcClass = connectionGroup.getPropertyEntry(AdapterConstants.KEY_JDBC_DRIVERCLASS).getValue();
+
+		PropertyEntry jarEntry = connectionGroup.getPropertyEntry(AdapterConstants.KEY_JDBC_JAR);
 		String jdbcJarFile = null;
 
-		if (expertMode != null && AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(expertMode.getValue())) {
-			PropertyGroup expertGroup = connectionGroup.getPropertyGroup(AdapterConstants.KEY_GROUP_CUSTOM);
-			jdbcUrl = expertGroup.getPropertyEntry(AdapterConstants.KEY_URL_CUSTOM).getValue();
-			jdbcClass = expertGroup.getPropertyEntry(AdapterConstants.KEY_DRIVERCLASS_CUSTOM).getValue();
-			jdbcJarFile = expertGroup.getPropertyEntry(AdapterConstants.KEY_JAR_CUSTOM).getValue();
-		} else {
-			jdbcClass = connectionGroup.getPropertyEntry(AdapterConstants.KEY_DRIVERCLASS).getValue();
-			jdbcUrl = getJdbcUrl(connectionGroup);
+		if (jarEntry != null) {
+			jdbcJarFile = connectionGroup.getPropertyEntry(AdapterConstants.KEY_JDBC_JAR).getValue();
 		}
 
 		blobHandle = new HashMap<Long, InputStream>();
@@ -221,7 +179,7 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 		try {
 			Driver d = null;
 
-			if (expertMode != null && AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(expertMode.getValue())) {
+			if (jdbcJarFile != null) {
 				File file = new File(jdbcJarFile);
 				if (!file.exists())
 					throw new AdapterException("File not found on the Agent Host at " + jdbcJarFile);
@@ -263,7 +221,7 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 			stmt = connection.createStatement();
 			stmt.setFetchSize(fetchSize);
 
-			postopen(connectionInfo, isCDC);
+			postopen();
 
 			init();
 		} catch (Exception e) {
@@ -278,17 +236,22 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 
 		try {
 			cfgResultSet = this.connection.getMetaData().getTableTypes();
-			
-			while(cfgResultSet.next())
-			{
+
+			while (cfgResultSet.next()) {
 				String s = cfgResultSet.getString("TABLE_TYPE");
-				
+
 				if (listSystemData) {
 					this.tablesType.add(s);
 				} else if (!s.toLowerCase().contains("system")) {
 					this.tablesType.add(s);
 				}
 			}
+
+			/*
+			 * ColumnBuilder init
+			 */
+			columnBuilder.loadMapping(getMappingFile());
+
 		} catch (Exception e) {
 			throw new AdapterException(e);
 		} finally {
@@ -302,9 +265,11 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 		}
 	}
 
-	protected abstract void preopen(RemoteSourceDescription connectionInfo, boolean isCDC) throws AdapterException;
+	protected abstract InputStream getMappingFile() throws Exception;
 
-	protected abstract void postopen(RemoteSourceDescription connectionInfo, boolean isCDC) throws AdapterException;
+	protected abstract void preopen() throws AdapterException;
+
+	protected abstract void postopen() throws AdapterException;
 
 	@Override
 	public void close() throws AdapterException {
@@ -633,7 +598,8 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 					if (browseOffset == 0) {
 						// get all Schemas of the current catalog
 						browseResultSet = connection.getMetaData().getTables(catalog_search_string,
-								schema_search_string, null,this.tablesType.toArray(new String[this.tablesType.size()]));
+								schema_search_string, null,
+								this.tablesType.toArray(new String[this.tablesType.size()]));
 					}
 
 					while (browseResultSet.next()) {
@@ -822,6 +788,16 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 		metas.setIndices(updateTableMetaDataIndices(tools));
 		setPrimaryFlagForColumns(metas);
 
+		Capabilities<TableCapability> caps = new Capabilities<TableCapability>();
+		caps.setCapability(TableCapability.CAP_TABLE_AND);
+		caps.setCapability(TableCapability.CAP_TABLE_AND_DIFFERENT_COLUMNS);
+		caps.setCapability(TableCapability.CAP_TABLE_COLUMN_CAP);
+		caps.setCapability(TableCapability.CAP_TABLE_LIMIT);
+		caps.setCapability(TableCapability.CAP_TABLE_OR);
+		caps.setCapability(TableCapability.CAP_TABLE_OR_DIFFERENT_COLUMNS);
+		caps.setCapability(TableCapability.CAP_TABLE_SELECT);
+		metas.setCapabilities(caps);
+
 		return metas;
 	}
 
@@ -894,60 +870,31 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	 * @return
 	 * @throws AdapterException
 	 */
-	protected List<Column> updateTableMetaDataColumns(UniqueNameTools tools) throws AdapterException {
-		ResultSet rsColumns = null;
-		DatabaseMetaData meta = null;
-		List<Column> cols = new ArrayList<Column>();
 
+	protected List<Column> updateTableMetaDataColumns(UniqueNameTools tools) throws AdapterException {
+		DatabaseMetaData meta = null;
+		ResultSet rsColumns = null;
+
+		List<Column> cols = new ArrayList<Column>();
 		try {
+			logger.debug("Create unique key list for [" + tools.getTable() + "]");
 			meta = connection.getMetaData();
-			// catalog, schemaPattern, tableNamePatter, types
+
 			rsColumns = meta.getColumns(tools.getCatalog(), tools.getSchema(), tools.getTable(), null);
+
 			while (rsColumns.next()) {
 				String columnName = rsColumns.getString("COLUMN_NAME");
 				int columnType = rsColumns.getInt("DATA_TYPE");
 				String typeName = rsColumns.getString("TYPE_NAME");
-
-				if (typeName.compareTo("date") == 0)
-					columnType = 91;
-				else if (typeName.compareTo("time") == 0)
-					columnType = 92;
-				else if (typeName.compareTo("datetime2") == 0)
-					columnType = 93;
-				else if (typeName.compareTo("text") == 0)
-					columnType = java.sql.Types.CLOB;
-				else if (typeName.compareTo("ntext") == 0)
-					columnType = java.sql.Types.NCLOB;
-				else if (typeName.compareTo("image") == 0)
-					columnType = java.sql.Types.BLOB;
-				else if (typeName.compareTo("nvarchar") == 0)
-					columnType = java.sql.Types.NVARCHAR;
-				else if (typeName.compareTo("nchar") == 0)
-					columnType = java.sql.Types.NCHAR;
-				// @Bug Index Server Changes pending. FIXME uncomment when IS is
-				// fixed
-				else if (typeName.compareTo("smalldatetime") == 0)
-					// columnType = -100; //Since java does not have this, we
-					// create our
-					// own version.
-					columnType = java.sql.Types.TIMESTAMP;
-
 				int size = rsColumns.getInt("COLUMN_SIZE");
 				int nullable = rsColumns.getInt("NULLABLE");
+				int scale = rsColumns.getInt("DECIMAL_DIGITS");
 
-				Column column = new Column(columnName, getAdapterDataType(columnType));
-				column.setLength(size);
-				column.setNullable(nullable == DatabaseMetaData.columnNullable);
-				column.setNativeDataType(typeName);
-				if (getAdapterDataType(columnType) == DataType.DECIMAL) {
-					column.setPrecision(size);
-					column.setScale(rsColumns.getInt("DECIMAL_DIGITS"));
-				}
+				Column column = columnBuilder.createColumn(columnName, columnType, typeName, size, size, scale);
 
-				logger.debug(AdapterUtil.dumpResultSet(rsColumns));
+				column.setNullable(nullable == 1);
 
 				columnHelper.addColumn(column, columnType);
-
 				Capabilities<ColumnCapability> columnCaps = new Capabilities<ColumnCapability>();
 				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_BETWEEN);
 				columnCaps.setCapability(ColumnCapability.CAP_COLUMN_FILTER);
@@ -962,10 +909,11 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 				column.setCapabilities(columnCaps);
 
 				cols.add(column);
+
 			}
 
 		} catch (SQLException e) {
-			logger.error("Error while building columns", e);
+			logger.error("Error while building column list.", e);
 			throw new AdapterException(e);
 		} finally {
 			if (rsColumns != null) {
@@ -974,10 +922,10 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 				} catch (SQLException e) {
 					logger.warn("Error while closing ResultSet", e);
 				}
-
 				rsColumns = null;
 			}
 		}
+
 		return cols;
 	}
 
@@ -1036,71 +984,6 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 		}
 	}
 
-	/**
-	 * 
-	 * @param dbType
-	 * @return
-	 * @throws AdapterException
-	 */
-	public DataType getAdapterDataType(int dbType) throws AdapterException {
-		switch (dbType) {
-		case java.sql.Types.CHAR:
-		case java.sql.Types.VARCHAR:
-			return DataType.VARCHAR;
-
-		case java.sql.Types.NCHAR:
-		case java.sql.Types.NVARCHAR:
-			return DataType.NVARCHAR;
-
-		case java.sql.Types.INTEGER:
-		case java.sql.Types.SMALLINT:
-		case java.sql.Types.TINYINT:
-			return DataType.INTEGER;
-
-		case java.sql.Types.BIGINT:
-			return DataType.BIGINT;
-
-		case java.sql.Types.NUMERIC:
-		case java.sql.Types.DECIMAL:
-			return DataType.DECIMAL;
-
-		case java.sql.Types.REAL:
-		case java.sql.Types.FLOAT:
-			return DataType.REAL;
-
-		case java.sql.Types.DOUBLE:
-			return DataType.DOUBLE;
-
-		case java.sql.Types.TIMESTAMP:
-			return DataType.TIMESTAMP;
-
-		case java.sql.Types.DATE:
-			return DataType.DATE;
-
-		case java.sql.Types.TIME:
-			return DataType.TIME;
-
-		case java.sql.Types.BLOB:
-			return DataType.BLOB;
-
-		case java.sql.Types.LONGVARCHAR:
-		case java.sql.Types.CLOB:
-			return DataType.CLOB;
-
-		case java.sql.Types.LONGNVARCHAR:
-		case java.sql.Types.NCLOB:
-			return DataType.NCLOB;
-
-		case java.sql.Types.BINARY:
-			return DataType.VARBINARY;
-		case -100:
-			return DataType.SECONDDATE;
-		default:
-			logger.warn("DB TYPE [" + dbType + "] is not supported will be translated as VARCHAR");
-			return DataType.VARCHAR;
-		}
-	}
-
 	@Override
 	public void setFetchSize(int fetchSize) {
 		this.fetchSize = fetchSize;
@@ -1129,127 +1012,138 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	}
 
 	/**
-	 * When an user invokes a select query, based on your adapter capabilities You
-	 * get a SQL that your adapter can use. If you support joins and other
-	 * capabilties, you may need to parse this sql and rewrite it to match your
-	 * system.
+	 * 
 	 */
-	@Override
 	public void executeStatement(String sqlstatement, StatementInfo info) throws AdapterException {
-		/**
-		 * Since we have a simple adapter with no push down. So we will directly use it.
-		 * If you do support pushdown you need to parse the sql, figure out the columns
-		 * being returned and save a copy to be used in getNext.
-		 */
-
-		blobHandle.clear();
-		clobHandle.clear();
-
-		String sourcesql = rewriteSQL(sqlstatement);
-
-		logger.debug("Incoming statement [" + sqlstatement + "]");
-		logger.debug("Rewrite statement [" + sourcesql + "]");
-
 		try {
-			connection.setAutoCommit(false);
-			stmt.setFetchSize(fetchSize);// So that fetch size work.
-
-			resultSet = stmt.executeQuery(sourcesql);
+			String pstmtStr = rewriteSQL(sqlstatement);
+			this.pstmtType = getSQLRewriter().getQueryType();
+			logger.info("MySQL Statement [" + pstmtStr + "]");
+			info.setExecuteStatement(pstmtStr);
+			this.connection.setAutoCommit(false);
+			this.pstmt = this.connection.prepareStatement(pstmtStr);
+			executeSelectStatement(this.pstmt, info);
 		} catch (SQLException e) {
 			logger.error("Error while executing statement", e);
-			throw new AdapterException(e.getMessage());
 		}
 	}
 
-	/**
-	 * Adapter capabilities defines what push down capabilities this adapter has.
-	 * Does your underlying system handle joins, insert, etc? You need to add each
-	 * of the capability for this adapter in this method. This method is called at
-	 * the initial registration of this adapter.
-	 * 
-	 * Note the response will be cached and if you decide to change you will need to
-	 * restart adapter.
-	 */
-	@Override
-	public Capabilities<AdapterCapability> getCapabilities(String version) throws AdapterException {
-		Capabilities<AdapterCapability> capbility = new Capabilities<AdapterCapability>();
-		List<AdapterCapability> capabilities = new ArrayList<AdapterCapability>();
-		if ((System.getenv("DP_AGENT_DIR") == null) || (System.getenv("CAPS_INI") == null)) {
-			capabilities.add(AdapterCapability.CAP_ALTER_TAB_WITH_ADD);
-			capabilities.add(AdapterCapability.CAP_ALTER_TAB_WITH_DROP);
-			capabilities.add(AdapterCapability.CAP_WINDOWING_FUNC);
-			capabilities.add(AdapterCapability.CAP_BI_ADD);
-			capabilities.add(AdapterCapability.CAP_BIGINT_BIND);
-			capabilities.add(AdapterCapability.CAP_SIMPLE_EXPR_IN_GROUPBY);
-			capabilities.add(AdapterCapability.CAP_INSERT_SELECT_ORDERBY);
-			capabilities.add(AdapterCapability.CAP_DELETE);
-
-			capabilities.add(AdapterCapability.CAP_SIMPLE_EXPR_IN_PROJ);
-			capabilities.add(AdapterCapability.CAP_EXPR_IN_PROJ);
-			capabilities.add(AdapterCapability.CAP_NESTED_FUNC_IN_PROJ);
-			capabilities.add(AdapterCapability.CAP_SIMPLE_EXPR_IN_WHERE);
-			capabilities.add(AdapterCapability.CAP_EXPR_IN_WHERE);
-			capabilities.add(AdapterCapability.CAP_NESTED_FUNC_IN_WHERE);
-			capabilities.add(AdapterCapability.CAP_SIMPLE_EXPR_IN_INNER_JOIN);
-			capabilities.add(AdapterCapability.CAP_EXPR_IN_INNER_JOIN);
-			capabilities.add(AdapterCapability.CAP_NESTED_FUNC_IN_INNER_JOIN);
-			capabilities.add(AdapterCapability.CAP_SIMPLE_EXPR_IN_LEFT_OUTER_JOIN);
-			capabilities.add(AdapterCapability.CAP_EXPR_IN_LEFT_OUTER_JOIN);
-			capabilities.add(AdapterCapability.CAP_NESTED_FUNC_IN_LEFT_OUTER_JOIN);
-			capabilities.add(AdapterCapability.CAP_SIMPLE_EXPR_IN_FULL_OUTER_JOIN);
-			capabilities.add(AdapterCapability.CAP_EXPR_IN_FULL_OUTER_JOIN);
-			capabilities.add(AdapterCapability.CAP_NESTED_FUNC_IN_FULL_OUTER_JOIN);
-			capabilities.add(AdapterCapability.CAP_SIMPLE_EXPR_IN_GROUPBY);
-			capabilities.add(AdapterCapability.CAP_EXPR_IN_GROUPBY);
-			capabilities.add(AdapterCapability.CAP_NESTED_FUNC_IN_GROUPBY);
-			capabilities.add(AdapterCapability.CAP_SIMPLE_EXPR_IN_ORDERBY);
-			capabilities.add(AdapterCapability.CAP_EXPR_IN_ORDERBY);
-			capabilities.add(AdapterCapability.CAP_NESTED_FUNC_IN_ORDERBY);
-			capabilities.add(AdapterCapability.CAP_SELECT);
-			capabilities.add(AdapterCapability.CAP_SCALAR_FUNCTIONS_NEED_ARGUMENT_CHECK);
-			capabilities.add(AdapterCapability.CAP_NONEQUAL_COMPARISON);
-			capabilities.add(AdapterCapability.CAP_OR_DIFFERENT_COLUMNS);
-			capabilities.add(AdapterCapability.CAP_PROJECT);
-
-			capabilities.add(AdapterCapability.CAP_LIKE);
-			capabilities.add(AdapterCapability.CAP_GROUPBY);
-			capabilities.add(AdapterCapability.CAP_ORDERBY);
-			capabilities.add(AdapterCapability.CAP_AGGREGATES);
-			capabilities.add(AdapterCapability.CAP_AGGREGATE_COLNAME);
-			capabilities.add(AdapterCapability.CAP_JOINS);
-			capabilities.add(AdapterCapability.CAP_JOINS_OUTER);
-			capabilities.add(AdapterCapability.CAP_AND);
-			capabilities.add(AdapterCapability.CAP_OR);
-			capabilities.add(AdapterCapability.CAP_BETWEEN);
-			capabilities.add(AdapterCapability.CAP_IN);
-			capabilities.add(AdapterCapability.CAP_BI_SUBSTR);
-			capabilities.add(AdapterCapability.CAP_BI_MOD);
-			capabilities.add(AdapterCapability.CAP_AGGREGATES);
-			capabilities.add(AdapterCapability.CAP_AND_DIFFERENT_COLUMNS);
-
-			capabilities.add(AdapterCapability.CAP_LIMIT);
-
-		} else {
-			String sFileName = System.getenv("DP_AGENT_DIR") + "/configuration/" + System.getenv("CAPS_INI");
-			try {
-				Properties prop = new Properties();
-				InputStream input = null;
-				input = new FileInputStream(sFileName);
-				prop.load(input);
-
-				Enumeration<?> e = prop.propertyNames();
-				while (e.hasMoreElements()) {
-					String key = (String) e.nextElement();
-					int value = Integer.parseInt(prop.getProperty(key));
-					capabilities.add(AdapterCapability.valueOf(value));
-				}
-			} catch (IOException e) {
-				throw new AdapterException(e, e.getLocalizedMessage());
+	private void executeSelectStatement(PreparedStatement pstmt, StatementInfo info) throws SQLException {
+		List<DataInfo> params = info.getParams();
+		int paramNum = params.isEmpty() ? 0 : params.size();
+		for (int i = 0; i < paramNum; i++) {
+			DataInfo dataInfo = (DataInfo) params.get(i);
+			String paramValue = dataInfo.getDataValue();
+			switch (dataInfo.getDataType()) {
+			case NCLOB:
+				pstmt.setByte(i + 1, Byte.parseByte(paramValue));
+				break;
+			case REAL:
+				pstmt.setShort(i + 1, Short.parseShort(paramValue));
+				break;
+			case INTEGER:
+				pstmt.setInt(i + 1, Integer.parseInt(paramValue));
+				break;
+			case ALPHANUM:
+				pstmt.setLong(i + 1, Long.parseLong(paramValue));
+				break;
+			case NVARCHAR:
+				pstmt.setDouble(i + 1, Double.parseDouble(paramValue));
+				break;
+			case SMALLINT:
+				pstmt.setFloat(i + 1, Float.parseFloat(paramValue));
+				break;
+			case VARCHAR:
+				pstmt.setBigDecimal(i + 1, new BigDecimal(paramValue));
+				break;
+			case DATE:
+				pstmt.setBytes(i + 1, paramValue.getBytes(Charset.forName("UTF-8")));
+				break;
+			case INVALID:
+				pstmt.setDate(i + 1, Date.valueOf(paramValue));
+				break;
+			case TINYINT:
+				pstmt.setTime(i + 1, Time.valueOf(paramValue));
+				break;
+			case BIGINT:
+				pstmt.setTimestamp(i + 1, java.sql.Timestamp.valueOf(paramValue));
+				break;
+			case DECIMAL:
+				Blob blob = this.connection.createBlob();
+				blob.setBytes(1L, paramValue.getBytes());
+				pstmt.setBlob(i + 1, blob);
+				break;
+			case TIMESTAMP:
+				Clob clob = this.connection.createClob();
+				clob.setString(1L, paramValue);
+				pstmt.setClob(i + 1, clob);
+				break;
+			case SECONDDATE:
+				NClob nclob = this.connection.createNClob();
+				nclob.setString(1L, paramValue);
+				pstmt.setNClob(i + 1, nclob);
+				break;
+			case BLOB:
+			case CLOB:
+			case DOUBLE:
+			case TIME:
+			case VARBINARY:
+			default:
+				pstmt.setString(i + 1, paramValue);
 			}
 		}
+		pstmt.setFetchSize(this.fetchSize);
+		this.resultSet = pstmt.executeQuery();
+		this.stmt = pstmt;
+	}
 
-		capbility.setCapabilities(capabilities);
-		return capbility;
+	/**
+	 * 
+	 */
+	public Capabilities<AdapterCapability> getCapabilities(String version) throws AdapterException {
+		Capabilities<AdapterCapability> capability = new Capabilities<AdapterCapability>();
+		List<AdapterCapability> capabilities = new ArrayList<AdapterCapability>();
+
+		capabilities.addAll(CapabilitiesUtils.getBICapabilities());
+		capabilities.addAll(CapabilitiesUtils.getSelectCapabilities());
+
+		capability.setCapabilities(capabilities);
+		capability.setCapability(AdapterCapability.CAP_COLUMN_CAP);
+		capability.setCapability(AdapterCapability.CAP_TABLE_CAP);
+
+		capability.setCapability(AdapterCapability.CAP_SELECT);
+		capability.setCapability(AdapterCapability.CAP_AND);
+		capability.setCapability(AdapterCapability.CAP_PROJECT);
+		capability.setCapability(AdapterCapability.CAP_LIMIT);
+		capability.setCapability(AdapterCapability.CAP_LIMIT_ARG);
+		capability.setCapability(AdapterCapability.CAP_TRANSACTIONAL_CDC);
+		capability.setCapability(AdapterCapability.CAP_BIGINT_BIND);
+		capability.setCapability(AdapterCapability.CAP_METADATA_ATTRIBUTE);
+		capability.setCapability(AdapterCapability.CAP_WHERE);
+		capability.setCapability(AdapterCapability.CAP_SIMPLE_EXPR_IN_WHERE);
+		capability.setCapability(AdapterCapability.CAP_AND_DIFFERENT_COLUMNS);
+		capability.setCapability(AdapterCapability.CAP_LIKE);
+		capability.setCapability(AdapterCapability.CAP_NONEQUAL_COMPARISON);
+		capability.setCapability(AdapterCapability.CAP_AGGREGATES);
+
+		return capability;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see org.crossroad.sdi.adapter.impl.IJDBCAdapter#onClose()
+	 */
+	public void onClose() {
+		logger.debug("Closing Preparestatement object");
+		if (this.pstmt != null) {
+			try {
+				this.pstmt.close();
+			} catch (SQLException e) {
+				logger.warn("Error while closing PrepareStatement", e);
+			}
+			this.pstmt = null;
+		}
 	}
 
 	@Override
@@ -1334,6 +1228,8 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 		logger.debug("In the function");
 
 	}
+
+	protected abstract ISQLRewriter getSQLRewriter();
 }
 
 final class DriverDelegator implements Driver {

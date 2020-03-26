@@ -1,7 +1,13 @@
+/**
+ * 
+ */
 package org.crossroad.sdi.adapter.impl;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -18,324 +24,896 @@ import com.sap.hana.dp.adapter.sdk.parser.Order;
 import com.sap.hana.dp.adapter.sdk.parser.Query;
 import com.sap.hana.dp.adapter.sdk.parser.TableReference;
 
-public class SQLRewriter {
-	static Logger logger = LogManager.getLogger(SQLRewriter.class);
+/**
+ * @author e.soden
+ *
+ */
+public class SQLRewriter implements ISQLRewriter {
+	private Logger logger = LogManager.getLogger(SQLRewriter.class);
+	private final int maxIdentifierLength;
+	private final Map<String, String> schemaAliasReplacements = new HashMap<String, String>();
+	private char aliasSeed = 'A';
+	private ExpressionBase.Type queryType = ExpressionBase.Type.QUERY;
+	private Map<String, String> aliasMap = new HashMap<String, String>();
+	private ColumnHelper helper = null;
 
-	// SQL rewrite entry point
-	public static String rewriteSQL(String sql) throws AdapterException {
+	public SQLRewriter(int maxIdentifierLength) {
+		this.maxIdentifierLength = maxIdentifierLength;
+	}
+	
+
+	@Override
+	public void setColumnHelper(ColumnHelper helper) {
+		this.helper = helper;
+	}
+
+	public SQLRewriter(int maxIdentifierLength, String schemaAlias, String schemaAliasReplacement) {
+		this.maxIdentifierLength = maxIdentifierLength;
+		if (schemaAlias != null) {
+			this.schemaAliasReplacements.put(schemaAlias, schemaAliasReplacement);
+		}
+	}
+
+	public ExpressionBase.Type getQueryType() {
+		return this.queryType;
+	}
+
+	public void setQueryType(ExpressionBase.Type type) {
+		this.queryType = type;
+	}
+
+	private void cleanUp() {
+
+	}
+
+	@Override
+	public String rewriteSQL(String sql)
+			throws AdapterException {
+
+		logger.debug("Rewrite SQL [" + sql + "]");
+
+		cleanUp();
+
+
 		List<ExpressionParserMessage> messageList = new ArrayList<ExpressionParserMessage>();
 		try {
 			ExpressionBase query = ExpressionParserUtil.buildQuery(sql, messageList);
 			if (query != null) {
+				setQueryType(query.getType());
 				String sqlRewrite = regenerateSQL(query);
-				logger.trace(sql);
-				logger.trace(sqlRewrite);
+				logger.debug("SQL Generated [" + sqlRewrite + "]");
+
 				return sqlRewrite;
-			} else {
-				for (ExpressionParserMessage e : messageList) {
-					logger.error(e.getText());
-				}
-				throw new AdapterException("Parse failed. See earlier logs");
 			}
+			for (ExpressionParserMessage e : messageList) {
+				this.logger.error(e.getText());
+			}
+			throw new AdapterException("Parse failed. See earlier logs");
 		} catch (Exception e) {
-			logger.error("SQL Rewrite failed.", e);
+			this.logger.error("SQL Rewrite failed.", e);
 			throw new AdapterException(e, "Parser failed. See earlier logs");
 		}
 	}
 
-	private static String regenerateSQL(ExpressionBase query) throws Exception {
-		if (query.getType() == Type.SELECT)
+	private String regenerateSQL(ExpressionBase query) throws AdapterException {
+		if (query.getType() == ExpressionBase.Type.SELECT) {
 			return regenerateSQL((Query) query);
-		else {
-			StringBuffer str = new StringBuffer();
-			Expression exp = (Expression) query;
-			str.append(printExpression(exp.getOperands().get(0)));
-			str.append(" ");
-			str.append(printSetOperation(query.getType()));
-			str.append(" ");
-			str.append(printExpression(exp.getOperands().get(1)));
-			return str.toString();
 		}
+		if (query.getType() == ExpressionBase.Type.INSERT) {
+			return regenerateInsertSQL((Query) query);
+		}
+		if (query.getType() == ExpressionBase.Type.DELETE) {
+			return regenerateDeleteSQL((Query) query);
+		}
+		if (query.getType() == ExpressionBase.Type.UPDATE) {
+			return regenerateUpdateSQL((Query) query);
+		}
+		StringBuffer str = new StringBuffer();
+		Expression exp = (Expression) query;
+		str.append(expressionBuilder((ExpressionBase) exp.getOperands().get(0)));
+		str.append(" ");
+		str.append(printSetOperation(query.getType()));
+		str.append(" ");
+		str.append(expressionBuilder((ExpressionBase) exp.getOperands().get(1)));
+		return str.toString();
 	}
 
-	private static String regenerateSQL(Query query) throws Exception {
+	public String regenerateInsertSQL(Query query) throws AdapterException {
+		StringBuffer sql = new StringBuffer();
+
+		sql.append("INSERT INTO ");
+		sql.append(expressionBuilder(query.getFromClause()));
+		if (query.getProjections() != null) {
+			sql.append(" (");
+			sql.append(expressionBaseListBuilder(query.getProjections()));
+			sql.append(")");
+		}
+		if (query.getValueClause() != null) {
+			sql.append(" VALUES ");
+			sql.append("(");
+			sql.append(expressionBaseListBuilder(query.getValueClause()));
+			sql.append(")");
+		}
+		if (query.getSubquery() != null) {
+			sql.append(expressionBuilder(query.getSubquery()));
+		}
+		return sql.toString();
+	}
+
+	private String regenerateDeleteSQL(Query query) throws AdapterException {
+		StringBuffer sql = new StringBuffer();
+		sql.append("DELETE FROM ");
+		sql.append(expressionBuilder(query.getFromClause()));
+		if (query.getWhereClause() != null) {
+			sql.append(" WHERE ");
+			sql.append(whereClauseBuilder(query.getWhereClause()));
+		}
+		return sql.toString();
+	}
+
+	private String regenerateUpdateSQL(Query query) throws AdapterException {
+		StringBuffer sql = new StringBuffer();
+		sql.append("UPDATE ");
+		sql.append(expressionBuilder(query.getFromClause()));
+		sql.append(" SET ");
+		sql.append(setClauseBuilder(query.getProjections()));
+		if (query.getWhereClause() != null) {
+			sql.append(" WHERE ");
+			sql.append(whereClauseBuilder(query.getWhereClause()));
+		}
+		return sql.toString();
+	}
+
+	private String regenerateSQL(Query query) throws AdapterException {
 		StringBuffer sql = new StringBuffer();
 
 		sql.append("SELECT ");
-		if (query.getDistinct())
+
+		if (query.getDistinct()) {
 			sql.append("DISTINCT ");
-		sql.append(printColumnList(query.getProjections()));
-		sql.append(" FROM ");
-		sql.append(printExpression(query.getFromClause()));
+		}
+		sql.append(expressionBaseListBuilder(query.getProjections()));
+
+		sql.append(fromClauseBuilder(query.getFromClause()));
+
 		if (query.getWhereClause() != null) {
-			sql.append(" WHERE ");
-			sql.append(printWhereClause(query.getWhereClause()));
+			sql.append(whereClauseBuilder(query.getWhereClause()));
 		}
 		if (query.getGroupBy() != null) {
-			sql.append(" GROUP BY ");
-			sql.append(printColumnList(query.getGroupBy()));
+			sql.append(groupByClauseBuilder(query.getGroupBy()));
 		}
 		if (query.getHavingClause() != null) {
-			sql.append(" HAVING ");
-			sql.append(printWhereClause(query.getHavingClause()));
+			sql.append(havingClauseBuilder(query.getHavingClause()));
 		}
 		if (query.getOrderBy() != null) {
-			sql.append(" ORDER BY ");
-			sql.append(printOrder(query.getOrderBy()));
+			sql.append(orderClauseBuilder(query.getOrderBy()));
 		}
-		if (query.getLimit() != null) {
-			sql.append(" LIMIT ");
-			sql.append(query.getLimit());
+
+		try {
+			Method method = query.getClass().getMethod("getLimit", null);
+
+			Object value = method.invoke(query, null);
+			if (value != null) {
+				// if (query.getLimit() != null) {
+				sql.append(" LIMIT ");
+				// sql.append(query.getLimit());
+				sql.append(value.toString());
+				sql.append(" ");
+			}
+		} catch (Exception e) {
+			logger.error("Failed to retrieve Limit", e);
 		}
 
 		return sql.toString();
 	}
-	
-	private static String printOrder(List<Order> order) throws Exception {
+
+	private String clauseBuilder(String keyword, List<ExpressionBase> eprx) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		buffer.append(keyword);
+		buffer.append(expressionBaseListBuilder(eprx));
+
+		return buffer.toString();
+	}
+
+	private String fromClauseBuilder(ExpressionBase eprx) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+		buffer.append(" FROM ");
+		buffer.append(expressionBuilder(eprx));
+
+		return buffer.toString();
+	}
+
+	private String groupByClauseBuilder(List<ExpressionBase> eprx) throws AdapterException {
+		return clauseBuilder(" GROUP BY ", eprx).toString();
+	}
+
+	/**
+	 * 
+	 * @param eprx
+	 * @return
+	 * @throws AdapterException
+	 */
+	private String havingClauseBuilder(List<ExpressionBase> eprx) throws AdapterException {
+		return clauseBuilder(" HAVING ", eprx).toString();
+	}
+
+	/**
+	 * 
+	 * @param order
+	 * @return
+	 * @throws Exception
+	 */
+	private String orderClauseBuilder(List<Order> order) throws AdapterException {
 		boolean first = true;
 		StringBuffer str = new StringBuffer();
+		str.append(" ORDER BY ");
+
 		for (Order o : order) {
-			if (first)
+			if (first) {
 				first = false;
-			else
+			} else {
 				str.append(", ");
-			str.append(printExpression(o.getExpression()));
-			if (o.getOrderType() == Order.Type.ASC)
+			}
+			str.append(expressionBuilder(o.getExpression()));
+			if (o.getOrderType() == Order.Type.ASC) {
 				str.append(" ASC");
-			else
+			} else {
 				str.append(" DESC");
+			}
 		}
 		return str.toString();
 	}
 
-	private static String printColumnList(List<ExpressionBase> proj) throws Exception {
+	/**
+	 * Build the where clause
+	 * 
+	 * @param where
+	 * @return
+	 * @throws AdapterException
+	 */
+	private String whereClauseBuilder(List<ExpressionBase> where) throws AdapterException {
+		boolean first = true;
+		StringBuffer str = new StringBuffer(" WHERE ");
+
+		for (ExpressionBase exp : where) {
+			if (!first) {
+				str.append(" AND ");
+			}
+			str.append("(").append(expressionBuilder(exp)).append(")");
+			if (first) {
+				first = false;
+			}
+		}
+		return str.toString();
+	}
+
+	private String setClauseBuilder(List<ExpressionBase> setclause) throws AdapterException {
+		boolean first = true;
+
+		StringBuffer str = new StringBuffer();
+		for (ExpressionBase exp : setclause) {
+			if (!first) {
+				str.append(", ");
+			}
+			str.append(assignClauseBuilder(exp));
+			if (first) {
+				first = false;
+			}
+		}
+		return str.toString();
+	}
+
+	private String assignClauseBuilder(ExpressionBase exp) throws AdapterException {
+		StringBuffer str = new StringBuffer();
+		ColumnReference col = (ColumnReference) exp;
+		String colName = col.getColumnName().substring(1, col.getColumnName().length() - 1);
+		
+		str.append(columnNameBuilder(col.getColumnName()));
+		str.append(" = ");
+		str.append(expressionBuilder(col.getColumnValueExp()));
+		return str.toString();
+	}
+
+	protected String aliasRewriter(String alias) {
+		if (alias.length() <= this.maxIdentifierLength) {
+			return alias.replace("\"", "");
+		}
+		String newAlias = (String) this.aliasMap.get(alias);
+		if (newAlias == null) {
+			newAlias = String.valueOf(this.aliasSeed++);
+			this.aliasMap.put(alias, newAlias);
+		}
+		return newAlias.replace("\"", "");
+	}
+
+	protected String expressionBuilder(ExpressionBase val) throws AdapterException {
+		StringBuffer str = new StringBuffer();
+		logger.debug("Expression type [" + val.getType().name() + "]");
+		switch (val.getType()) {
+		case ALL:
+			str.append(printExpressionList((Expression) val));
+			break;
+		case COLUMN:
+			ColumnReference columnReference = (ColumnReference) val;
+			if (columnReference.getTableName() != null) {
+				str.append(columnNameBuilder(aliasRewriter(columnReference.getTableName())) + ".");
+			}
+			
+			str.append(columnNameBuilder(columnReference.getColumnName()));
+			break;
+		case AND:
+			str.append(tableNameBuilder((TableReference) val));
+			break;
+		case TABLE:
+			str.append(tableNameBuilder((TableReference) val));
+			break;
+		case SUBQUERY:
+			str.append(" ( ");
+			str.append(regenerateSQL((Query) val));
+			str.append(" ) ");
+			break;
+		case TIMESTAMP_LITERAL:
+		case DATE_LITERAL:
+		case TIME_LITERAL:
+			str.append(printDT((Expression) val));
+			break;
+		case GREATER_THAN:
+		case EQUAL:
+		case DIVIDE:
+		case GREATER_THAN_EQ:
+		case SUBTRACT:
+		case MULTIPLY:
+		case NOT_EQUAL:
+		case LESS_THAN:
+		case ADD:
+		case LESS_THAN_EQ:
+			str.append(twoMembersBuilder((Expression) val));
+			break;
+		case IN:
+		case NOT_IN:
+			str.append(statementINBuilder((Expression) val));
+			break;
+		case CHARACTER_LITERAL:
+		case INT_LITERAL:
+		case FLOAT_LITERAL:
+			str.append(((Expression) val).getValue());
+			break;
+		case OR:
+			str.append(printOr((Expression) val));
+			break;
+		case FUNCTION:
+			str.append(printFunction((Expression) val));
+			break;
+		case LEFT_OUTER_JOIN:
+		case INNER_JOIN:
+			str.append(statementJoinBuilder((Join) val));
+			break;
+		case LIKE:
+		case NOT_LIKE:
+			str.append(statementLIKEBuilder((Expression) val));
+			break;
+		case IS_NULL:
+		case IS_NOT_NULL:
+			str.append(statementNULLBuilder((Expression) val));
+			break;
+		case UNION_ALL:
+		case UNION_DISTINCT:
+		case INTERSECT:
+		case EXCEPT:
+			str.append(statementUNIONBuilder((Expression) val));
+			break;
+		case SELECT:
+		case QUERY:
+			str.append(statementSUBQUERYBuilder(((Expression) val)));
+			break;
+		case DISTINCT:
+			statementDISTINCTBuilder((Expression) val);
+			break;
+		case BETWEEN:
+		case NOT_BETWEEN:
+			str.append(statementBETWEENBuilder((Expression) val));
+			break;
+		case CONCAT:
+			str.append(statementCONCAT((Expression) val));
+			break;
+		case NULL:
+		case DELETE:
+		case ORDER_BY:
+		case VARIABLE:
+		case ASSIGN:
+		case CASE:
+		case PARAMETER:
+		case UNKNOWN:
+		case UPDATE:
+		case CASE_CLAUSE:
+		case CASE_CLAUSES:
+		case CASE_ELSE:
+			// case ROW_NUMBER:
+		case UNARY_POSITIVE:
+		case INSERT:
+		default:
+			throw new AdapterException("Unknown value [" + ((Expression) val).getValue() + "]");
+		}
+		if (val.getAlias() != null) {
+			str.append(" ");
+			str.append(aliasRewriter(val.getAlias()));
+		}
+		return str.toString();
+	}
+
+	private String statementBETWEENBuilder(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		if (Type.BETWEEN.equals(expr.getType())) {
+			buffer.append(" BETWEEN ");
+		} else if (Type.NOT_BETWEEN.equals(expr.getType())) {
+			buffer.append(" NOT BETWEEN ");
+
+		} else {
+			throw new AdapterException("Expression type [" + expr.getType().name()
+					+ "] not recognize as 'BETWEEN|NOT BETWEEN' statement.");
+		}
+
+		boolean first = true;
+		for (ExpressionBase base : expr.getOperands()) {
+			if (first) {
+				first = false;
+			} else {
+				buffer.append(" AND ");
+			}
+
+			buffer.append(expressionBuilder(base));
+		}
+
+		return buffer.toString();
+	}
+
+	private String statementCONCAT(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		buffer.append("CONCAT (");
+		boolean first = true;
+		for (ExpressionBase base : expr.getOperands()) {
+			if (first) {
+				first = false;
+			} else {
+				buffer.append(',');
+			}
+			buffer.append(expressionBuilder(base));
+		}
+		buffer.append(")");
+		return buffer.toString();
+	}
+
+	private String statementDISTINCTBuilder(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		buffer.append("DISTINCT ");
+		for (ExpressionBase base : expr.getOperands()) {
+			buffer.append(expressionBuilder(base));
+		}
+		buffer.append(")");
+
+		return buffer.toString();
+	}
+
+	private String statementSUBQUERYBuilder(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		buffer.append("(");
+		buffer.append(regenerateSQL(expr.getOperands().get(0)));
+		buffer.append(")");
+
+		return buffer.toString();
+	}
+
+	private String statementUNIONBuilder(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		buffer.append(expressionBuilder(expr.getOperands().get(0)));
+		if (Type.UNION_ALL.equals(expr.getType())) {
+			buffer.append(" UNION ALL ");
+		} else if (Type.UNION_DISTINCT.equals(expr.getType())) {
+			buffer.append(" UNION ");
+		} else if (Type.INTERSECT.equals(expr.getType())) {
+			buffer.append(" INTERSECT ");
+		} else if (Type.EXCEPT.equals(expr.getType())) {
+			buffer.append(" EXCEPT ");
+		} else {
+			throw new AdapterException(
+					"Expression type [" + expr.getType().name() + "] not recognize as 'UNION ALL|UNION' statement.");
+		}
+
+		buffer.append(regenerateSQL(expr.getOperands().get(1)));
+
+		return buffer.toString();
+	}
+
+	private String statementNULLBuilder(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		int size = expr.getOperands().size();
+
+		buffer.append(expressionBuilder(expr.getOperands().get(0)));
+		if (Type.IN.equals(expr.getType())) {
+			buffer.append(" IS NULL ");
+		} else if (Type.NOT_IN.equals(expr.getType())) {
+			buffer.append(" IS NOT NULL ");
+		} else {
+			throw new AdapterException("Expression type [" + expr.getType().name()
+					+ "] not recognize as 'IS NULL| IS NOT NULL' statement.");
+		}
+
+		if (size > 1) {
+			buffer.append(expressionBuilder(expr.getOperands().get(1)));
+		}
+		return buffer.toString();
+	}
+
+	/**
+	 * 
+	 * @param join
+	 * @return
+	 * @throws AdapterException
+	 */
+	private String statementJoinBuilder(Join join) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		buffer.append("(");
+		buffer.append(expressionBuilder(join.getLeftNode()));
+		if (join.getType() == ExpressionBase.Type.INNER_JOIN) {
+			buffer.append(" INNER JOIN ");
+		} else if (Type.LEFT_OUTER_JOIN.equals(join.getType())) {
+			buffer.append(" LEFT OUTER JOIN ");
+		} else {
+			throw new AdapterException("Expression type [" + join.getType().name()
+					+ "] not recognize as 'INNER JOIN|LEFT OUTER JOIN' statement.");
+		}
+		buffer.append(expressionBuilder(join.getRightNode()));
+		buffer.append(" ON (");
+		buffer.append(expressionBuilder(join.getJoinCondition()));
+		buffer.append("))");
+
+		return buffer.toString();
+	}
+
+	private String statementLIKEBuilder(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		buffer.append(expressionBuilder(expr.getOperands().get(0)));
+		if (Type.LIKE.equals(expr.getType())) {
+			buffer.append(" LIKE ");
+		} else if (Type.NOT_LIKE.equals(expr.getType())) {
+			buffer.append(" NOT LIKE ");
+		} else {
+			throw new AdapterException(
+					"Expression type [" + expr.getType().name() + "] not recognize as 'LIKE|NOT LIKE' statement.");
+		}
+
+		buffer.append(expressionBuilder(expr.getOperands().get(1)));
+
+		return buffer.toString();
+	}
+
+	private String statementINBuilder(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		buffer.append(expressionBuilder(expr.getOperands().get(0)));
+		if (Type.IN.equals(expr.getType())) {
+			buffer.append(" IN ");
+		} else if (Type.NOT_IN.equals(expr.getType())) {
+			buffer.append(" NOT IN ");
+		} else {
+			throw new AdapterException(
+					"Expression type [" + expr.getType().name() + "] not recognize as 'IN|NOT IN' statement.");
+		}
+
+		buffer.append("(");
+		buffer.append(expressionBuilder(expr.getOperands().get(1)));
+		buffer.append(")");
+
+		return buffer.toString();
+	}
+
+	private String printExpressionList(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		boolean first = true;
+
+		if (expr.getOperands() == null || expr.getOperands().isEmpty()) {
+			buffer.append(expr.getValue());
+		} else {
+			for (ExpressionBase b : expr.getOperands()) {
+				if (first) {
+					first = false;
+				} else {
+					buffer.append(",");
+				}
+
+				buffer.append(expressionBuilder(b));
+			}
+		}
+		return buffer.toString();
+	}
+
+	private String expressionBaseListBuilder(List<ExpressionBase> proj) throws AdapterException {
 		boolean first = true;
 		StringBuffer str = new StringBuffer();
 		for (ExpressionBase exp : proj) {
-			if (first)
+			if (first) {
 				first = false;
-			else
+			} else {
 				str.append(", ");
-			str.append(printExpression(exp));
+			}
+			str.append(expressionBuilder(exp));
 		}
 		return str.toString();
 	}
 
-	private static String printWhereClause(List<ExpressionBase> where) throws Exception {
-		boolean first = true;
-		StringBuffer str = new StringBuffer();
-		for (ExpressionBase exp : where) {
-			if (!first)
-				str.append(" AND (");
+	private String printDT(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
 
-			str.append(printExpression(exp));
+		buffer.setLength(0);
 
-			if (!first)
-				str.append(")");
+		String _v = ((Expression) expr.getOperands().get(0)).getValue();
 
-			if (first)
-				first = false;
-		}
-		return str.toString();
-	}
-
-	private static String printExpression(ExpressionBase val) throws Exception {
-		StringBuffer str = new StringBuffer();
-		switch (val.getType()) {
-		case COLUMN: {
-			ColumnReference exp = (ColumnReference) val;
-			if (exp.getTableName() != null)
-				str.append(exp.getTableName() + ".");
-			str.append(exp.getColumnName());
+		switch (expr.getType()) {
+		case TIMESTAMP_LITERAL:
+			buffer.append("TIMESTAMP ");
+			buffer.append(_v);
+			buffer.append("");
 			break;
-		}
-		case TABLE: {
-			TableReference tab = (TableReference) val;
-			/*
-			 * A table reference is in the format catalog.schema.tablename But
-			 * not all databases do have catalogs or schemas, it can be any
-			 * combination. Therefore we have to remove from e.g.
-			 * <none>.schema1.tablename1 the "<none>." portion.
-			 */
-			String uniquename = tab.getUnquotedName();
-			String[] namecomponents = uniquename.split("\\.");
-			if (namecomponents.length != 3) {
-				throw new AdapterException(
-						"SQL contains a table reference which does not follow the format catalog.schema.tablename - this is impossible!");
-			}
-			for (int i = 0; i < 3; i++) {
-				if (namecomponents[i].equals("<none>") == false) {
-					str.append("\"");
-					str.append(namecomponents[i]);
-					str.append("\"");
-					if (i != 2) {
-						str.append(".");
-					}
-				}
-			}
-			break;
-		}
-		case SELECT: {
-			Query query = (Query) val;
-			str.append(" ( ");
-			str.append(regenerateSQL(query));
-			str.append(" ) ");
-			break;
-		}
-		case QUERY: {
-			Query query = (Query) val;
-			str.append(" ( ");
-			str.append(regenerateSQL(query));
-			str.append(" ) ");
-			break;
-		}
-		case INNER_JOIN:
-		case LEFT_OUTER_JOIN: {
-			Join join = (Join) val;
-			str.append("(");
-			str.append(printExpression(join.getLeftNode()));
-			if (val.getType() == Type.INNER_JOIN)
-				str.append(" INNER JOIN ");
-			else
-				str.append(" LEFT OUTER JOIN ");
-			str.append(printExpression(join.getRightNode()));
-			str.append(" ON (");
-			str.append(printExpression(join.getJoinCondition()));
-			str.append("))");
-			break;
-		}
-		case ALL:
-			str.append("*");
-			break;
-		case FUNCTION: {
-			Expression exp = (Expression) val;
-			str.append(exp.getValue() + "(");
-			boolean first = true;
-			for (ExpressionBase param : exp.getOperands()) {
-				if (first)
-					first = false;
-				else
-					str.append(", ");
-				str.append(printExpression(param));
-			}
-			str.append(")");
-			break;
-		}
-		case AND:
-		case OR: {
-			Expression exp = (Expression) val;
-			str.append(printExpression(exp.getOperands().get(0)));
-			str.append(" " + exp.getValue() + " ");
-			str.append(printExpression(exp.getOperands().get(1)));
-			break;
-		}
-		case IN:
-		case NOT_IN: {
-			Expression exp = (Expression) val;
-			str.append(printExpression(exp.getOperands().get(0)));
-			str.append(" " + exp.getValue() + " (");
-			str.append(printExpression(exp.getOperands().get(1)));
-			int count = exp.getOperands().size();
-			for (int k = 2; k < count; k++) {
-				str.append(", ");
-				str.append(printExpression(exp.getOperands().get(k)));
-			}
-			str.append(")");
-			break;
-		}
-		case BETWEEN:
-		case NOT_BETWEEN: {
-			Expression exp = (Expression) val;
-			str.append(printExpression(exp.getOperands().get(0)));
-			str.append(" " + exp.getValue() + " ");
-			str.append(printExpression(exp.getOperands().get(1)));
-			str.append(" AND ");
-			str.append(printExpression(exp.getOperands().get(2)));
-			break;
-		}
-		case EQUAL:
-		case NOT_EQUAL:
-		case LESS_THAN:
-		case LESS_THAN_EQ:
-		case GREATER_THAN:
-		case GREATER_THAN_EQ:
-		case NOT_LIKE:
-		case LIKE:
-		case ADD:
-		case SUBTRACT:
-		case MULTIPLY:
-		case DIVIDE: {
-			// binary operation
-			Expression exp = (Expression) val;
-			str.append(printExpression(exp.getOperands().get(0)));
-			str.append(" " + exp.getValue() + " ");
-			str.append(printExpression(exp.getOperands().get(1)));
-			break;
-		}
-		case IS_NULL:
-		case IS_NOT_NULL: {
-			Expression exp = (Expression) val;
-			str.append(printExpression(exp.getOperands().get(0)));
-			str.append(" " + exp.getValue() + " ");
-			break;
-		}
-		case INT_LITERAL:
-		case FLOAT_LITERAL: {
-			Expression exp = (Expression) val;
-			str.append(exp.getValue());
-			break;
-		}
-		case CHARACTER_LITERAL: {
-			Expression exp = (Expression) val;
-			str.append("N" + exp.getValue());
-			break;
-		}
-		case UNION_ALL:
-		case UNION_DISTINCT:
-		case INTERSECT:
-		case EXCEPT:
-			str.append(" ( ");
-			str.append(regenerateSQL(val));
-			str.append(" ) ");
-			break;
-		case UNARY_NEGATIVE:
-		case UNARY_POSITIVE: {
-			Expression exp = (Expression) val;
-			str.append(exp.getValue());
-			str.append(printExpression(exp.getOperands().get(0)));
-			break;
-		}
 		default:
-			Expression exp = (Expression) val;
-			throw new Exception("Unknown value:" + exp.getValue());
+			throw new AdapterException("Expression type [" + expr.getType().name() + "] is not supported.");
 		}
 
-		if (val.getAlias() != null) {
-			str.append(" ");
-			str.append(val.getAlias());
+		return buffer.toString();
+	}
+
+	private String printFxColumns(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+		boolean first = true;
+
+		try {
+			FUNCTIONS fx = FUNCTIONS.valueOf(expr.getValue());
+
+			buffer.append(fx.name());
+			buffer.append("(");
+
+			for (ExpressionBase b : expr.getOperands()) {
+				if (first) {
+					first = false;
+				} else {
+					buffer.append(", ");
+				}
+
+				buffer.append(expressionBuilder(b));
+
+			}
+			buffer.append(")");
+		} catch (Exception e) {
+			throw new AdapterException(e);
 		}
 
+		return buffer.toString();
+	}
+
+	private String printOr(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+		boolean first = true;
+
+		try {
+			for (ExpressionBase b : expr.getOperands()) {
+				if (first) {
+					first = false;
+				} else {
+					buffer.append(" OR ");
+				}
+
+				buffer.append(expressionBuilder(b));
+
+			}
+		} catch (Exception e) {
+			throw new AdapterException(e);
+		}
+
+		return buffer.toString();
+	}
+
+	private String printFunction(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+		FUNCTIONS fx = FUNCTIONS.valueOf(expr.getValue());
+		try {
+			switch (fx) {
+			case TO_DOUBLE:
+				buffer.append("CAST(");
+				buffer.append(expressionBuilder(expr.getOperands().get(0)));
+				buffer.append(" AS DOUBLE PRECISION");
+				buffer.append(")");
+				break;
+			case TO_DECIMAL:
+				List<ExpressionBase> params = expr.getOperands();
+				if (params.size() < 3) {
+					buffer.append("CAST(");
+					buffer.append(expressionBuilder(expr.getOperands().get(0)));
+					buffer.append(" AS DECIMAL");
+					buffer.append(")");
+				} else {
+					buffer.append("CAST(");
+					buffer.append(expressionBuilder(expr.getOperands().get(0)));
+					buffer.append(" AS DECIMAL(");
+					buffer.append(expressionBuilder(expr.getOperands().get(1)));
+					buffer.append(",");
+					buffer.append(expressionBuilder(expr.getOperands().get(2)));
+					buffer.append(")");
+					buffer.append(")");
+				}
+				break;
+			case SUM:
+			case COUNT:
+			case MIN:
+			case MAX:
+				buffer.append(printFxColumns(expr));
+				break;
+			case TO_REAL:
+			case TO_INT:
+			case TO_INTEGER:
+			case TO_SMALLINT:
+			case TO_TINYINT:
+			case TO_BIGINT:
+			case TO_TIMESTAMP:
+				buffer.append("CAST(");
+				buffer.append(expressionBuilder(expr.getOperands().get(0)));
+				buffer.append(" AS ");
+				buffer.append(fx.suffix());
+				buffer.append(")");
+				break;
+			case MOD:
+				buffer.append("(").append(expressionBuilder(expr.getOperands().get(0))).append(" % ")
+						.append(expressionBuilder(expr.getOperands().get(1))).append(")");
+				break;
+			case CEIL:
+				buffer.append("CEILING(");
+				buffer.append(expressionBuilder(expr.getOperands().get(0)));
+				buffer.append(")");
+				break;
+			case LN:
+				buffer.append("LOG(");
+				buffer.append(expressionBuilder(expr.getOperands().get(0)));
+				buffer.append(")");
+				break;
+			case LOG:
+				buffer.append("LOG(");
+				buffer.append(expressionBuilder(expr.getOperands().get(1)));
+				buffer.append(", ");
+				buffer.append(expressionBuilder(expr.getOperands().get(0)));
+				buffer.append(")");
+				break;
+			case ATAN2:
+			case STDDEV:
+			case AVG:
+				if (expr.getValue().equals("ATAN2")) {
+					buffer.append("ATN2 (");
+				} else if (expr.getValue().equals("STDDEV")) {
+					buffer.append("STDEV (");
+				} else if (expr.getValue().equals("AVG")) {
+					buffer.append("AVG (");
+				} else {
+					buffer.append(expr.getValue() + "(");
+				}
+				boolean first = true;
+				for (ExpressionBase param : expr.getOperands()) {
+					if (first) {
+						if (param.getType() == ExpressionBase.Type.DISTINCT) {
+							buffer.append("DISTINCT ");
+							continue;
+						}
+						first = false;
+					} else {
+						buffer.append(", ");
+					}
+					buffer.append(expressionBuilder(param));
+				}
+				if (expr.getValue().equals("AVG")) {
+					buffer.append(" * 1.0 )");
+				} else {
+					buffer.append(")");
+				}
+				break;
+			case TO_VARCHAR:
+				buffer.append(expressionBuilder(expr.getOperands().get(0)));
+				/*
+				 * if (columnHelper != null) { buffer.append("CAST (");
+				 * buffer.append(printExpression(expr.getOperands().get(0)));
+				 * buffer.append(" AS VARCHAR)"); } else { buffer.append("-- " +
+				 * expr.getValue()); }
+				 */
+				break;
+			default:
+				throw new AdapterException("Function [" + expr.getValue() + "] is not supported.");
+			}
+		} catch (Exception e) {
+			throw new AdapterException(e, "Error while building function [" + expr.getValue() + "].");
+		}
+
+		return buffer.toString();
+	}
+
+	/**
+	 * Build statement containing two expression separate by a sign or something
+	 * else
+	 * 
+	 * 
+	 * @param expr
+	 * @return
+	 * @throws AdapterException
+	 */
+	private String twoMembersBuilder(Expression expr) throws AdapterException {
+		StringBuffer str = new StringBuffer();
+		try {
+			str.append(expressionBuilder((ExpressionBase) expr.getOperands().get(0)));
+			str.append(" " + expr.getValue() + " ");
+			str.append(expressionBuilder((ExpressionBase) expr.getOperands().get(1)));
+		} catch (Exception e) {
+			throw new AdapterException(e);
+		}
 		return str.toString();
 	}
 
-	private static String printSetOperation(Type type) {
+	/**
+	 * 
+	 * @param tabRef
+	 * @return
+	 * @throws AdapterException
+	 */
+	private String tableNameBuilder(TableReference tabRef) throws AdapterException {
+		return UniqueNameTools.build(tabRef.getName()).getTable();
+	}
+
+	/**
+	 * 
+	 * @param columnName
+	 * @return
+	 */
+	private String columnNameBuilder(String columnName) {
+		StringBuffer buffer = new StringBuffer();
+		buffer.append(columnName.replaceAll("\"", ""));
+		return buffer.toString();
+	}
+
+	private static String printSetOperation(ExpressionBase.Type type) throws AdapterException {
 		String str = new String();
 		switch (type) {
-		case UNION_ALL:
+		case OR:
 			str = "UNION ALL";
 			break;
-		case UNION_DISTINCT:
+		case LESS_THAN:
 			str = "UNION DISTINCT";
 			break;
-		case INTERSECT:
+		case AND:
 			str = "INTERSECT";
 			break;
-		case EXCEPT:
+		case UNION_ALL:
 			str = "EXCEPT";
 			break;
 		default:
-			break;
+			throw new AdapterException("Operation [" + type.name() + "] is not supported.");
 		}
 		return str;
 	}
+
 }

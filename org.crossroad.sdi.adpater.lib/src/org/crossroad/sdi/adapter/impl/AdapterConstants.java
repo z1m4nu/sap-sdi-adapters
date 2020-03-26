@@ -9,16 +9,16 @@ package org.crossroad.sdi.adapter.impl;
  */
 public final class AdapterConstants {
 	public static final String KEY_THIRDPARTY = "jdbc.thirdparty.custom";
-	public static final String KEY_JAR_CUSTOM = "jdbc.jarfile.custom";
-	public static final String KEY_DRIVERCLASS_CUSTOM = "jdbc.driverclass.custom";
-	public static final String KEY_URL_CUSTOM = "jdbc.url.custom";
+	public static final String KEY_JDBC_JAR = "jdbc.jarfile";
+	public static final String KEY_JDBC_URL = "jdbc.url";
+	public static final String KEY_JDBC_DRIVERCLASS = "jdbc.driver.class";
 
 	public static final String KEY_GROUP_MAIN = "jdbc.main";
-	public static final String KEY_GROUP_CUSTOM = "jdbc.expert";
 	public static final String KEY_GROUP_NORMAL = "jdbc.normal";
 	public static final String KEY_GROUP_CONNECTION = "jdbc.connection";
+	public static final String KEY_GROUP_DATAMAPPING = "jdbc.datamapping";
 
-	public static final String KEY_DRIVERCLASS = "jdbc.driverclass";
+	
 
 	public static final String KEY_HOSTNAME = "jdbc.host";
 	public static final String KEY_PORT = "jdbc.port";
@@ -26,6 +26,10 @@ public final class AdapterConstants {
 	public static final String KEY_OPTION = "jdbc.option";
 	public static final String KEY_WITHSYS = "jdbc.systables";
 	public static final String KEY_NULLASEMPTYSTRING = "jdbc.nullasemptystring";
+	
+	public static final String KEY_DATAMAPPING = "jdbc.datamapping.custom";
+	public static final String KEY_DATAMAPPING_FILE = "jdbc.datamapping.file";
+	public static final String KEY_DATAMAPPING_FILE_DEFAULT = "mapping.properties";
 	
 	
 	
