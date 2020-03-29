@@ -31,7 +31,8 @@ public final class AdapterConstants {
 	public static final String KEY_DATAMAPPING_FILE = "jdbc.datamapping.file";
 	public static final String KEY_DATAMAPPING_FILE_DEFAULT = "mapping.properties";
 	
-	
+	public static final String KEY_JDBC_SQLWRITER = "jdbc.sqlwriter.class";
+	public static final String KEY_JDBC_SQLWRITER_DEFAULT = "org.crossroad.sdi.adapter.impl.SQLRewriter";
 	
 	
 	public static final String PRP_SCHEMA = "schema";

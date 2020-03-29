@@ -64,7 +64,7 @@ public class ColumnBuilder {
 		column.setLength(length);
 		column.setNativeLength(length);
 
-		jdbcTypeName = jdbcTypeName.replace(" ", "");
+		jdbcTypeName = jdbcTypeName.toUpperCase().replace(" ", "");
 
 		column.setDataType(DataType.valueOf(mappingTable.getProperty(jdbcTypeName, DataType.INVALID.name())));
 

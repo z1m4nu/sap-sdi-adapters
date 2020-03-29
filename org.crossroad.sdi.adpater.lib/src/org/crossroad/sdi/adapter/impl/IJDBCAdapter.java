@@ -28,14 +28,7 @@ public interface IJDBCAdapter {
 	
 	public void onClose();
 	
-	/**
-	 * 
-	 * @param sqlstatement
-	 * @return
-	 * @throws AdapterException
-	 */
-	public String rewriteSQL(String sqlstatement) throws AdapterException;
-	
+
 	/**
 	 * 
 	 * @throws AdapterException

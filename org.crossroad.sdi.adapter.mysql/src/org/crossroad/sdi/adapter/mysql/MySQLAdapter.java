@@ -72,11 +72,6 @@ public class MySQLAdapter extends AbstractJDBCAdapter {
 	}
 
 	@Override
-	public String rewriteSQL(String sqlstatement) throws AdapterException {
-		return this.sqlRewriter.rewriteSQL(sqlstatement);
-	}
-
-	@Override
 	public void doCloseResultSet() throws AdapterException {
 		logger.debug("In the function doCloseResultSet");
 

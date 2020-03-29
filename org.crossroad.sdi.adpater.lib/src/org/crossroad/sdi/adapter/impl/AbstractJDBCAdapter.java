@@ -32,6 +32,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
@@ -99,8 +100,8 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	private List<String> tablesType = new ArrayList<String>();
 	protected ExpressionBase.Type pstmtType = ExpressionBase.Type.QUERY;
 
-	private PreparedStatement pstmt = null;
-	private ResultSet bulkColumnsResultSet = null;
+	protected PreparedStatement pstmt = null;
+	
 
 	public AbstractJDBCAdapter() {
 		super();
@@ -109,7 +110,7 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 		/*
 		 * Debug purpose
 		 */
-		// logger.setLevel(Level.DEBUG);
+		logger.setLevel(Level.DEBUG);
 
 	}
 
@@ -1229,7 +1230,15 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 
 	}
 
+	public String rewriteSQL(String sqlstatement) throws AdapterException {
+		return getSQLRewriter().rewriteSQL(sqlstatement);
+	}
+	
 	protected abstract ISQLRewriter getSQLRewriter();
+	
+
+	
+	
 }
 
 final class DriverDelegator implements Driver {
