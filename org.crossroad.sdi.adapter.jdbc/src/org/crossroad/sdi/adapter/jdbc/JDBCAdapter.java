@@ -3,30 +3,23 @@
  */
 package org.crossroad.sdi.adapter.jdbc;
 
-import java.io.FileInputStream;
-import java.io.InputStream;
+import java.util.HashMap;
 
 import org.crossroad.sdi.adapter.impl.AbstractJDBCAdapter;
 import org.crossroad.sdi.adapter.impl.AdapterConstants;
 import org.crossroad.sdi.adapter.impl.ClassUtil;
-import org.crossroad.sdi.adapter.impl.ISQLRewriter;
 import org.crossroad.sdi.adapter.impl.RemoteSourceDescriptionFactory;
-import org.crossroad.sdi.adapter.impl.SQLRewriter;
 
 import com.sap.hana.dp.adapter.sdk.AdapterException;
+import com.sap.hana.dp.adapter.sdk.CredentialProperties;
 import com.sap.hana.dp.adapter.sdk.PropertyEntry;
 import com.sap.hana.dp.adapter.sdk.PropertyGroup;
 import com.sap.hana.dp.adapter.sdk.RemoteSourceDescription;
-import com.sap.hana.dp.adapter.sdk.parser.ExpressionBase;
-
 
 /**
-*	JDBCAdapter Adapter.
-*/
-public class JDBCAdapter extends AbstractJDBCAdapter{
-	private SQLRewriter sqlRewriter = new SQLRewriter(128);
-	protected ExpressionBase.Type pstmtType = ExpressionBase.Type.QUERY;
-
+ * JDBCAdapter Adapter.
+ */
+public class JDBCAdapter extends AbstractJDBCAdapter {
 
 	@Override
 	protected void populateCFGDriverList(PropertyEntry drvList) throws AdapterException {
@@ -60,20 +53,11 @@ public class JDBCAdapter extends AbstractJDBCAdapter{
 	/*
 	 * (non-Javadoc)
 	 * 
-	 * @see
-	 * org.crossroad.sdi.adapter.impl.IJDBCAdapter#getJdbcUrl(com.sap.hana.dp.
+	 * @see org.crossroad.sdi.adapter.impl.IJDBCAdapter#getJdbcUrl(com.sap.hana.dp.
 	 * adapter.sdk.PropertyGroup)
 	 */
 	public String getJdbcUrl(PropertyGroup main) throws AdapterException {
 		return main.getPropertyEntry(AdapterConstants.KEY_JDBC_URL).getValue();
-	}
-	
-	/*
-	 * (non-Javadoc)
-	 * @see org.crossroad.sdi.adapter.impl.IJDBCAdapter#rewriteSQL(java.lang.String)
-	 */
-	public String rewriteSQL(String sqlstatement) throws AdapterException {
-		return this.sqlRewriter.rewriteSQL(sqlstatement);
 	}
 
 	@Override
@@ -81,51 +65,30 @@ public class JDBCAdapter extends AbstractJDBCAdapter{
 		return JDBCAdapter.class;
 	}
 
-
 	public RemoteSourceDescription getRemoteSourceDescription() throws AdapterException {
 		RemoteSourceDescription rs = new RemoteSourceDescription();
 		PropertyGroup mainGroup = RemoteSourceDescriptionFactory.getJDBCConnectionGroup();
 		mainGroup.setDisplayName("JDBC Server connection definition");
 
 
-	
-		mainGroup.addProperty(RemoteSourceDescriptionFactory.getMappingProperty());
+		PropertyEntry entry = new PropertyEntry(AdapterConstants.KEY_JDBC_TYPE, "Database behavior",
+				"Select the database behavior");
+		HashMap<String, String> map = new HashMap<String, String>();
+		map.put("org.crossroad.sdi.adapter.db.jdbc.DBInfo", "Generic JDBC");
+		map.put("org.crossroad.sdi.adapter.db.mssql.DBInfo", "Microsoft SQL Server");
+		map.put("org.crossroad.sdi.adapter.db.mysql.DBInfo", "MySQL Server");
+
+		entry.setChoices(map);
+		entry.setDefaultValue(AdapterConstants.KEY_JDBC_TYPE_DEFAULT);
+
+		mainGroup.addProperty(entry);
+
+		mainGroup.addProperty(new PropertyEntry(AdapterConstants.KEY_DATAMAPPING_FILE, "Custom mapping file", "Mapping file", false));
+		
 		
 		rs.setCredentialProperties(RemoteSourceDescriptionFactory.getCredentialProperties());
 		rs.setConnectionProperties(mainGroup);
 		return rs;
 	}
-
-	@Override
-	protected InputStream getMappingFile() throws Exception {
-		PropertyGroup connectionGroup = connectionInfo.getConnectionProperties();
-		boolean customMapping = (connectionGroup.getPropertyEntry(AdapterConstants.KEY_DATAMAPPING) != null)
-				? AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(
-						connectionGroup.getPropertyEntry(AdapterConstants.KEY_DATAMAPPING).getValue())
-				: false;
-
-		return (customMapping
-				? new FileInputStream(
-						connectionGroup.getPropertyEntry(AdapterConstants.KEY_DATAMAPPING_FILE).getValue())
-				: null);
-	}
-
-	@Override
-	protected void postopen() throws AdapterException {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
-	protected void preopen() throws AdapterException {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
-	protected ISQLRewriter getSQLRewriter() {
-		return this.sqlRewriter;
-	}
-
 
 }
