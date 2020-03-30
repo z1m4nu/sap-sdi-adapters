@@ -12,7 +12,7 @@ import com.sap.hana.dp.adapter.sdk.AdapterException;
 import com.sap.hana.dp.adapter.sdk.RemoteSourceDescription;
 
 public class MysqlFactory extends AbstractJDBCAdapterFactory{
-	private static final String NAME = "DEBUGMYSQL";//"JDBC - MySQL Server";
+	private static final String NAME = "JDBC - MySQL Server";
 
 	public MysqlFactory(BundleContext context) {
 		super(context);

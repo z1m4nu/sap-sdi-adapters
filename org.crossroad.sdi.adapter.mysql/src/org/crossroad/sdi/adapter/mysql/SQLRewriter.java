@@ -334,6 +334,9 @@ public class SQLRewriter implements ISQLRewriter{
 	protected String expressionBuilder(ExpressionBase val) throws AdapterException {
 		StringBuffer str = new StringBuffer();
 		logger.debug("Expression type [" + val.getType().name() + "]");
+		
+		
+		
 		switch (val.getType()) {
 		case ALL:
 			str.append(printExpressionList((Expression) val));
@@ -408,7 +411,11 @@ public class SQLRewriter implements ISQLRewriter{
 			break;
 		case SELECT:
 		case QUERY:
-			str.append(statementSUBQUERYBuilder(((Expression) val)));
+			if (val instanceof Query) {
+			   str.append(statementSUBQUERYBuilder((Query)val));
+			} else {
+				str.append(statementSUBQUERYBuilder((Expression) val));
+			}
 			break;
 		case DISTINCT:
 			statementDISTINCTBuilder((Expression) val);
@@ -442,6 +449,9 @@ public class SQLRewriter implements ISQLRewriter{
 			str.append(" ");
 			str.append(aliasRewriter(val.getAlias()));
 		}
+		
+	
+		
 		return str.toString();
 	}
 
@@ -510,6 +520,17 @@ public class SQLRewriter implements ISQLRewriter{
 
 		buffer.append("(");
 		buffer.append(regenerateSQL(expr.getOperands().get(0)));
+		buffer.append(")");
+
+		return buffer.toString();
+	}
+	
+	private String statementSUBQUERYBuilder(Query query) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		buffer.append("(");
+		buffer.append(regenerateSQL(query));
 		buffer.append(")");
 
 		return buffer.toString();
@@ -584,6 +605,7 @@ public class SQLRewriter implements ISQLRewriter{
 		buffer.append(" ON (");
 		buffer.append(expressionBuilder(join.getJoinCondition()));
 		buffer.append("))");
+		
 
 		return buffer.toString();
 	}
@@ -776,12 +798,14 @@ public class SQLRewriter implements ISQLRewriter{
 			case TO_SMALLINT:
 			case TO_TINYINT:
 			case TO_BIGINT:
+				buffer.append("CAST(");
+				buffer.append(expressionBuilder(expr.getOperands().get(0)));
+				buffer.append(" AS SIGNED)");
+				break;
 			case TO_TIMESTAMP:
 				buffer.append("CAST(");
 				buffer.append(expressionBuilder(expr.getOperands().get(0)));
-				buffer.append(" AS ");
-				buffer.append(fx.suffix());
-				buffer.append(")");
+				buffer.append(" AS DATETIME)");
 				break;
 			case MOD:
 				buffer.append("(").append(expressionBuilder(expr.getOperands().get(0))).append(" % ")
