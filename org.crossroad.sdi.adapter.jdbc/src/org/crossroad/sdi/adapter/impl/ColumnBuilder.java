@@ -84,7 +84,7 @@ public class ColumnBuilder {
 
 		column.setDataType(DataType.valueOf(mappingTable.getProperty(jdbcTypeName, DataType.INVALID.name())));
 
-		logger.info("Name [" + name + "] JDBC Type [" + jdbcType + "] JDBC Name [" + jdbcTypeName + "] HANA Type ["
+		logger.debug("Name [" + name + "] JDBC Type [" + jdbcType + "] JDBC Name [" + jdbcTypeName + "] HANA Type ["
 				+ column.getDataType().name() + "]");
 		return column;
 	}

@@ -85,6 +85,8 @@ public class JDBCAdapter extends AbstractJDBCAdapter {
 
 		mainGroup.addProperty(new PropertyEntry(AdapterConstants.KEY_DATAMAPPING_FILE, "Custom mapping file", "Mapping file", false));
 		
+		mainGroup.addProperty(RemoteSourceDescriptionFactory.getOptionDisplaySystemTables());
+		mainGroup.addProperty(RemoteSourceDescriptionFactory.getOptionNullableAsEmpty());
 		
 		rs.setCredentialProperties(RemoteSourceDescriptionFactory.getCredentialProperties());
 		rs.setConnectionProperties(mainGroup);

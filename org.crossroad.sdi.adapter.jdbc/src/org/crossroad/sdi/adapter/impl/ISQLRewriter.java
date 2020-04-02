@@ -14,5 +14,6 @@ public interface ISQLRewriter {
 	public void addSchemaAliasReplacement(String schemaAlias, String schemaAliasReplacement);
 	
 
+	
 
 }

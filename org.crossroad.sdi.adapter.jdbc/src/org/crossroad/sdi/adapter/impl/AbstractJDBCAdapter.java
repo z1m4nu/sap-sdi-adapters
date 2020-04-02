@@ -27,6 +27,7 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
 import java.sql.Time;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
@@ -156,15 +157,6 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 
 		PropertyGroup connectionGroup = connectionInfo.getConnectionProperties();
 
-		listSystemData = (connectionGroup.getPropertyEntry(AdapterConstants.KEY_WITHSYS) != null)
-				? AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(
-						connectionGroup.getPropertyEntry(AdapterConstants.KEY_WITHSYS).getValue())
-				: false;
-
-		nullableAsEmpty = (connectionGroup.getPropertyEntry(AdapterConstants.KEY_NULLASEMPTYSTRING) != null)
-				? AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(
-						connectionGroup.getPropertyEntry(AdapterConstants.KEY_NULLASEMPTYSTRING).getValue())
-				: false;
 
 		String jdbcUrl = getJdbcUrl(connectionGroup);
 		String jdbcClass = connectionGroup.getPropertyEntry(AdapterConstants.KEY_JDBC_DRIVERCLASS).getValue();
@@ -238,7 +230,18 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 			stmt = connection.createStatement();
 			stmt.setFetchSize(fetchSize);
 
-		
+			PropertyGroup connexionGroup = description.getConnectionProperties();
+			
+			listSystemData = (connexionGroup.getPropertyEntry(AdapterConstants.KEY_WITHSYS) != null)
+					? AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(
+							connexionGroup.getPropertyEntry(AdapterConstants.KEY_WITHSYS).getValue())
+					: false;
+
+			nullableAsEmpty = (connexionGroup.getPropertyEntry(AdapterConstants.KEY_NULLASEMPTYSTRING) != null)
+					? AdapterConstants.BOOLEAN_TRUE.equalsIgnoreCase(
+							connexionGroup.getPropertyEntry(AdapterConstants.KEY_NULLASEMPTYSTRING).getValue())
+					: false;
+
 			
 			cfgResultSet = this.connection.getMetaData().getTableTypes();
 
@@ -251,8 +254,10 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 					this.tablesType.add(s);
 				}
 			}
-			
-			PropertyEntry entry = description.getConnectionProperties().getPropertyEntry(AdapterConstants.KEY_JDBC_TYPE);
+			/*
+			 * Mapping
+			 */
+			PropertyEntry entry = connexionGroup.getPropertyEntry(AdapterConstants.KEY_JDBC_TYPE);
 			String jdbcType = entry.getValue();
 			
 			if (jdbcType == null)
@@ -267,7 +272,7 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 				 * ColumnBuilder init
 				 */
 				String customMapping = null;
-				PropertyEntry mappingEntry = description.getConnectionProperties().getPropertyEntry(AdapterConstants.KEY_DATAMAPPING_FILE);
+				PropertyEntry mappingEntry = connexionGroup.getPropertyEntry(AdapterConstants.KEY_DATAMAPPING_FILE);
 				if(mappingEntry != null)
 				{
 					customMapping = mappingEntry.getValue();
@@ -276,8 +281,12 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 				columnBuilder.loadMapping(info.getMappingFile(), customMapping);
 				
 				sqlRewriter = (ISQLRewriter)Class.forName(info.getRewriterClass()).newInstance();//info.getRewriter();
-				
+
+
 			}
+			
+			
+			
 
 		} catch (Exception e) {
 			throw new AdapterException(e);
@@ -395,7 +404,7 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	 */
 	@Override
 	public void getNext(AdapterRowSet rowList) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - ");
 		try {
 			// blobHandle.clear();
 			/*
@@ -483,7 +492,7 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	 */
 	@Override
 	public List<BrowseNode> browseMetadata() throws AdapterException {
-		logger.debug("In the function browseMetadata");
+		logger.debug("Function -  browseMetadata");
 		/*
 		 * The call sequence is setBrowseNodeId(uniquename) and then multiple calls of
 		 * browseMetadata() to return one page after the other of nodes.
@@ -681,7 +690,7 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	 */
 	private void setValue(AdapterRow row, Column column, ResultSet rs, int colIndex, int rowIndex)
 			throws AdapterException, SQLException {
-		logger.debug("In the function [setValue]");
+
 		Calendar cal = Calendar.getInstance();
 		Long lobId = (long) (rowIndex * this.fetchSize + colIndex);
 		String str = null;
@@ -788,7 +797,7 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 
 	@Override
 	public Metadata importMetadata(String tableuniquename) throws AdapterException {
-		logger.debug("In the function [importMetadata]");
+		logger.debug("Function -  [importMetadata]");
 		/*
 		 * nodeId does match the format: catalog.schema.tablename
 		 */
@@ -881,7 +890,7 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	 * @throws AdapterException
 	 */
 	protected void updateTableMetaData(Properties nodecomponent, TableMetadata tableMetadata) throws AdapterException {
-		logger.debug("In the function [updateTableMetaData]");
+		logger.debug("Function -  [updateTableMetaData]");
 	}
 
 	/**
@@ -1014,23 +1023,23 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 
 	@Override
 	public String getSourceVersion(RemoteSourceDescription remoteSourceDescription) throws AdapterException {
-		logger.debug("In the function [getSourceVersion]");
+		logger.debug("Function -  [getSourceVersion]");
 		return null;
 	}
 
 	@Override
 	public void commitTransaction() throws AdapterException {
-		logger.debug("In the function [commitTransaction]");
+		logger.debug("Function -  [commitTransaction]");
 	}
 
 	@Override
 	public void rollbackTransaction() throws AdapterException {
-		logger.debug("In the function [rollbackTransaction]");
+		logger.debug("Function -  [rollbackTransaction]");
 	}
 
 	@Override
 	public int putNext(AdapterRowSet rows) throws AdapterException {
-		logger.debug("In the function [putNext]");
+		logger.debug("Function -  [putNext]");
 		return 0;
 	}
 
@@ -1039,9 +1048,12 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 	 */
 	public void executeStatement(String sqlstatement, StatementInfo info) throws AdapterException {
 		try {
+			logger.debug("Incoming SQL Statement [" + sqlstatement + "]");
 			String pstmtStr = rewriteSQL(sqlstatement);
+			logger.debug("Generated SQL Statement [" + pstmtStr + "]");
+			
 			this.pstmtType = this.sqlRewriter.getQueryType();
-			logger.info("SQL Statement [" + pstmtStr + "]");
+			
 			info.setExecuteStatement(pstmtStr);
 			this.connection.setAutoCommit(false);
 			this.pstmt = this.connection.prepareStatement(pstmtStr);
@@ -1171,48 +1183,48 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 
 	@Override
 	public void setAutoCommit(boolean autocommit) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - setAutoCommit");
 
 	}
 
 	@Override
 	public void executePreparedInsert(String sql, StatementInfo info) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - executePreparedInsert");
 
 	}
 
 	@Override
 	public int executeUpdate(String sql, StatementInfo info) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - executeUpdate");
 		return 0;
 	}
 
 	@Override
 	public void executePreparedUpdate(String sql, StatementInfo info) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - executePreparedUpdate");
 	}
 
 	@Override
 	public Metadata importMetadata(String nodeId, List<Parameter> dataprovisioningParameters) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - importMetadata");
 		return null;
 	}
 
 	@Override
 	public ParametersResponse queryParameters(String nodeId, List<Parameter> parametersValues) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - queryParameters");
 		return null;
 	}
 
 	@Override
 	public List<BrowseNode> loadTableDictionary(String lastUniqueName) {
-		logger.debug("In the function");
+		logger.debug("Function - loadTableDictionary");
 		return null;
 	}
 
 	@Override
 	public DataDictionary loadColumnsDictionary() {
-		logger.debug("In the function");
+		logger.debug("Function - loadColumnsDictionary()");
 		return null;
 	}
 
@@ -1225,30 +1237,30 @@ public abstract class AbstractJDBCAdapter extends Adapter implements IJDBCAdapte
 
 	@Override
 	public void executeCall(FunctionMetadata arg0) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - executeCall");
 
 	}
 
 	@Override
 	public Metadata getMetadataDetail(String arg0) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - getMetadataDetail");
 		return null;
 	}
 
 	@Override
 	public CallableProcedure prepareCall(ProcedureMetadata arg0) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - prepareCall");
 		return null;
 	}
 
 	@Override
 	public void setNodesListFilter(RemoteObjectsFilter arg0) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - setNodesListFilter");
 	}
 
 	@Override
 	public void validateCall(FunctionMetadata arg0) throws AdapterException {
-		logger.debug("In the function");
+		logger.debug("Function - validateCall");
 
 	}
 
