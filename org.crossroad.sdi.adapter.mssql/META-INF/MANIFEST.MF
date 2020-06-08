@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: org.crossroad.sdi.adapter
 Bundle-SymbolicName: org.crossroad.sdi.adapter.mssql
-Bundle-Version: 1.0.13
+Bundle-Version: 1.0.14
 Bundle-Activator: org.crossroad.sdi.adapter.mssql.Activator
 Bundle-Vendor: Crossroad Inc
 Require-Bundle: com.sap.hana.dp.adapterframework,org.antlr.runtime;bun

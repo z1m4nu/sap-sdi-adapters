@@ -152,8 +152,8 @@ public class MSSQLAdapter extends AbstractJDBCAdapter {
 	 * org.crossroad.sdi.adapter.impl.IJDBCAdapter#rewriteSQL(java.lang.String)
 	 */
 	public String rewriteSQL(String sqlstatement) throws AdapterException {
-		logger.debug("rewriteSQL simple [" + sqlstatement + "]");
-		return null;
+		logger.debug("rewriteSQL simple [" + sqlstatement + "]");		
+		return this.sqlRewriter.rewriteSQL(sqlstatement);
 	}
 
 	/*

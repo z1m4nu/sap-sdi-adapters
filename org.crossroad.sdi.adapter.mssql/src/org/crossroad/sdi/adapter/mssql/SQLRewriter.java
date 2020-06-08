@@ -33,7 +33,7 @@ import com.sap.hana.dp.adapter.sdk.parser.TableReference;
  * @author e.soden
  *
  */
-public class SQLRewriter implements ISQLRewriter{
+public class SQLRewriter implements ISQLRewriter {
 	private Logger logger = LogManager.getLogger(SQLRewriter.class);
 	private final int maxIdentifierLength;
 	private final Map<String, String> schemaAliasReplacements = new HashMap<String, String>();
@@ -42,7 +42,7 @@ public class SQLRewriter implements ISQLRewriter{
 	private Map<String, String> aliasMap = new HashMap<String, String>();
 
 	private ColumnHelper helper = null;
-	
+
 	public SQLRewriter(int maxIdentifierLength) {
 		this.maxIdentifierLength = maxIdentifierLength;
 	}
@@ -67,17 +67,15 @@ public class SQLRewriter implements ISQLRewriter{
 	}
 
 	private void cleanUp() {
-		
+
 	}
 
-	public String rewriteSQL(String sql)
-			throws AdapterException {
+	public String rewriteSQL(String sql) throws AdapterException {
 
 		logger.debug("Rewrite SQL [" + sql + "]");
 
 		cleanUp();
 
-	
 		List<ExpressionParserMessage> messageList = new ArrayList<ExpressionParserMessage>();
 		try {
 			ExpressionBase query = ExpressionParserUtil.buildQuery(sql, messageList);
@@ -386,41 +384,41 @@ public class SQLRewriter implements ISQLRewriter{
 			break;
 		case IS_NULL:
 		case IS_NOT_NULL:
-			str.append(statementNULLBuilder((Expression)val));
+			str.append(statementNULLBuilder((Expression) val));
 			break;
 		case UNION_ALL:
 		case UNION_DISTINCT:
 		case INTERSECT:
 		case EXCEPT:
-			str.append(statementUNIONBuilder((Expression)val));
+			str.append(statementUNIONBuilder((Expression) val));
 			break;
 		case SELECT:
 		case QUERY:
-			str.append(statementSUBQUERYBuilder(((Expression)val)));
+			str.append(statementSUBQUERYBuilder(((Expression) val)));
 			break;
 		case DISTINCT:
-			statementDISTINCTBuilder((Expression)val);
+			statementDISTINCTBuilder((Expression) val);
 			break;
 		case BETWEEN:
 		case NOT_BETWEEN:
-			str.append(statementBETWEENBuilder((Expression)val));
+			str.append(statementBETWEENBuilder((Expression) val));
 			break;
 		case CONCAT:
-			str.append(statementCONCAT((Expression)val));
+			str.append(statementCONCAT((Expression) val));
 			break;
+
+		case CASE:
+			str.append(statementCASEClauseBuilder((Expression) val));
+			break;
+		// case ROW_NUMBER:
 		case NULL:
 		case DELETE:
 		case ORDER_BY:
 		case VARIABLE:
 		case ASSIGN:
-		case CASE:
 		case PARAMETER:
 		case UNKNOWN:
 		case UPDATE:
-		case CASE_CLAUSE:
-		case CASE_CLAUSES:
-		case CASE_ELSE:
-		//case ROW_NUMBER:
 		case UNARY_POSITIVE:
 		case INSERT:
 		default:
@@ -433,32 +431,58 @@ public class SQLRewriter implements ISQLRewriter{
 		return str.toString();
 	}
 
+	private String statementCASEClauseBuilder(Expression expr) throws AdapterException {
+		StringBuffer buffer = new StringBuffer();
+		buffer.setLength(0);
+
+		buffer.append(" CASE ");
+
+		for (ExpressionBase base : expr.getOperands()) {
+			switch (base.getType()) {
+			case CASE_CLAUSES:
+				for (ExpressionBase elem : ((Expression)base).getOperands()) {
+					buffer.append(" WHEN ");
+					buffer.append(expressionBuilder(((Expression) elem).getOperands().get(0)));
+					buffer.append(" THEN ");
+					buffer.append(expressionBuilder(((Expression) elem).getOperands().get(1)));
+				}
+				break;
+			case CASE_ELSE:
+				buffer.append(" ELSE ");
+				buffer.append(expressionBuilder(((Expression) base).getOperands().get(0)));
+				break;
+			default:
+				throw new AdapterException("Unsupported type in case expression. [" + base.getType() + "]");
+			}
+		}
+
+		buffer.append(" END ");
+		return buffer.toString();
+
+	}
+
 	private String statementBETWEENBuilder(Expression expr) throws AdapterException {
 		StringBuffer buffer = new StringBuffer();
 		buffer.setLength(0);
 
-		if (Type.BETWEEN.equals(expr.getType()))
-		{
+		if (Type.BETWEEN.equals(expr.getType())) {
 			buffer.append(" BETWEEN ");
-		} else 	if (Type.NOT_BETWEEN.equals(expr.getType()))
-		{
+		} else if (Type.NOT_BETWEEN.equals(expr.getType())) {
 			buffer.append(" NOT BETWEEN ");
-			
+
 		} else {
 			throw new AdapterException("Expression type [" + expr.getType().name()
-					+ "] not recognize as 'BETWEEN|NOT BETWEEN' statement.");			
+					+ "] not recognize as 'BETWEEN|NOT BETWEEN' statement.");
 		}
 
 		boolean first = true;
-		for(ExpressionBase base:expr.getOperands())
-		{
-			if( first)
-			{
+		for (ExpressionBase base : expr.getOperands()) {
+			if (first) {
 				first = false;
 			} else {
 				buffer.append(" AND ");
 			}
-			
+
 			buffer.append(expressionBuilder(base));
 		}
 
@@ -468,13 +492,11 @@ public class SQLRewriter implements ISQLRewriter{
 	private String statementCONCAT(Expression expr) throws AdapterException {
 		StringBuffer buffer = new StringBuffer();
 		buffer.setLength(0);
-		
+
 		buffer.append("CONCAT (");
 		boolean first = true;
-		for (ExpressionBase base: expr.getOperands())
-		{
-			if (first)
-			{
+		for (ExpressionBase base : expr.getOperands()) {
+			if (first) {
 				first = false;
 			} else {
 				buffer.append(',');
@@ -484,14 +506,13 @@ public class SQLRewriter implements ISQLRewriter{
 		buffer.append(")");
 		return buffer.toString();
 	}
-	
+
 	private String statementDISTINCTBuilder(Expression expr) throws AdapterException {
 		StringBuffer buffer = new StringBuffer();
 		buffer.setLength(0);
 
 		buffer.append("DISTINCT ");
-		for(ExpressionBase base:expr.getOperands())
-		{
+		for (ExpressionBase base : expr.getOperands()) {
 			buffer.append(expressionBuilder(base));
 		}
 		buffer.append(")");
@@ -519,19 +540,20 @@ public class SQLRewriter implements ISQLRewriter{
 			buffer.append(" UNION ALL ");
 		} else if (Type.UNION_DISTINCT.equals(expr.getType())) {
 			buffer.append(" UNION ");
-		} else if (Type.INTERSECT.equals(expr.getType())){
+		} else if (Type.INTERSECT.equals(expr.getType())) {
 			buffer.append(" INTERSECT ");
-		} else if (Type.EXCEPT.equals(expr.getType())){
+		} else if (Type.EXCEPT.equals(expr.getType())) {
 			buffer.append(" EXCEPT ");
 		} else {
-			throw new AdapterException("Expression type [" + expr.getType().name()
-					+ "] not recognize as 'UNION ALL|UNION' statement.");
+			throw new AdapterException(
+					"Expression type [" + expr.getType().name() + "] not recognize as 'UNION ALL|UNION' statement.");
 		}
 
 		buffer.append(regenerateSQL(expr.getOperands().get(1)));
-		
+
 		return buffer.toString();
 	}
+
 	private String statementNULLBuilder(Expression expr) throws AdapterException {
 		StringBuffer buffer = new StringBuffer();
 		buffer.setLength(0);
@@ -665,11 +687,11 @@ public class SQLRewriter implements ISQLRewriter{
 
 		switch (expr.getType()) {
 		case TIMESTAMP_LITERAL:
-			//buffer.append("{ts");
+			// buffer.append("{ts");
 			buffer.append("convert(datetime,");
 			buffer.append(MSSQLAdapterUtil.buidTS(MSSQLAdapterUtil.str2DT(_v)));
 			buffer.append(")");
-			//buffer.append("}");
+			// buffer.append("}");
 			break;
 		default:
 			throw new AdapterException("Expression type [" + expr.getType().name() + "] is not supported.");
@@ -773,6 +795,7 @@ public class SQLRewriter implements ISQLRewriter{
 			case TO_TINYINT:
 			case TO_BIGINT:
 			case TO_TIMESTAMP:
+			case TO_VARCHAR:
 				buffer.append("CAST(");
 				buffer.append(expressionBuilder(expr.getOperands().get(0)));
 				buffer.append(" AS ");
@@ -831,15 +854,20 @@ public class SQLRewriter implements ISQLRewriter{
 					buffer.append(")");
 				}
 				break;
-			case TO_VARCHAR:
-				buffer.append(expressionBuilder(expr.getOperands().get(0)));
-				/*
-				 * if (columnHelper != null) { buffer.append("CAST (");
-				 * buffer.append(printExpression(expr.getOperands().get(0)));
-				 * buffer.append(" AS VARCHAR)"); } else { buffer.append("-- " +
-				 * expr.getValue()); }
-				 */
-				break;
+
+			/*
+			 * case TO_VARCHAR: buffer.append("CAST (");
+			 * //buffer.append(printExpressionList(expr.getOperands().get(0)));
+			 * buffer.append(expressionBuilder(expr.getOperands().get(0)));
+			 * buffer.append(" AS VARCHAR)");
+			 * 
+			 * 
+			 * if (columnHelper != null) { buffer.append("CAST (");
+			 * buffer.append(printExpressionList(expr.getOperands().get(0)));
+			 * buffer.append(" AS VARCHAR)"); } else { buffer.append("-- " +
+			 * expr.getValue()); } break;
+			 */
+
 			default:
 				throw new AdapterException("Function [" + expr.getValue() + "] is not supported.");
 			}
@@ -882,7 +910,7 @@ public class SQLRewriter implements ISQLRewriter{
 		String tabName = tabRef.getName();
 		if (tabName.contains(".")) {
 			buffer.append(MSSQLAdapterUtil.SQLTableBuilder(UniqueNameTools.build(tabName)));
-			//buffer.append(UniqueNameTools.build(tabName).getUniqueName());
+			// buffer.append(UniqueNameTools.build(tabName).getUniqueName());
 		} else if (tabRef.getDatabase() != null) {
 			buffer.append("[");
 			buffer.append(tabRef.getDatabase());
@@ -890,6 +918,7 @@ public class SQLRewriter implements ISQLRewriter{
 		}
 		return buffer.toString();
 	}
+
 	/**
 	 * 
 	 * @param columnName
