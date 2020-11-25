@@ -69,6 +69,7 @@ import com.sap.hana.dp.adapter.sdk.UniqueKey;
 import com.sap.hana.dp.adapter.sdk.parser.ExpressionBase;
 
 /**
+ * 
  * This is a sample adapter that connects to a database with jdbc driver. You
  * can modify driver and url to connect to any database system. currently it is
  * pointing to SQL server
